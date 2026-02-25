@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+}
+
+enum PaymentMethod {
+  PHONE_PAY
+  CASH
+}
+
+enum PaymentState {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+enum ClassStatus {
+  OPEN
+  CLOSED
+  CANCELED
+}
+
+model User {
+  id               String         @id @default(uuid())
+  name             String
+  profileImageDataUrl String?
+  age              Int?
+  fitnessGoals     String?
+  email            String         @unique
+  phone            String?
+  checkInQrCode    String         @unique @default(uuid())
+  role             Role           @default(MEMBER)
+  passwordHash     String?
+  supabaseUserId   String?        @unique
+  membershipStart  DateTime?
+  nextPaymentDue   DateTime?
+  paymentStatus    PaymentStatus  @default(UNPAID)
+  paymentMethod    PaymentMethod?
+  inviteSentAt     DateTime?
+  inviteAcceptedAt DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  payments         Payment[]
+  classSignups     ClassSignup[]
+  deviceTokens     DeviceToken[]
+
+  @@index([role])
+  @@index([nextPaymentDue])
+  @@index([supabaseUserId])
+}
+
+model Payment {
+  id                     String        @id @default(uuid())
+  user                   User          @relation(fields: [userId], references: [id])
+  userId                 String
+  amount                 Int
+  method                 PaymentMethod
+  status                 PaymentState  @default(PENDING)
+  date                   DateTime      @default(now())
+  stripePaymentIntentId  String?
+  createdAt              DateTime      @default(now())
+
+  @@index([userId])
+}
+
+model Workout {
+  id          String    @id @default(uuid())
+  date        DateTime  @unique
+  description String
+  createdAt   DateTime  @default(now())
+
+  @@index([date])
+}
+
+model Class {
+  id        String       @id @default(uuid())
+  title     String
+  datetime  DateTime
+  capacity  Int
+  status    ClassStatus  @default(OPEN)
+  createdAt DateTime     @default(now())
+
+  signups   ClassSignup[]
+
+  @@index([datetime])
+}
+
+model ClassSignup {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  class     Class    @relation(fields: [classId], references: [id])
+  classId   String
+  createdAt DateTime @default(now())
+  checkedInAt DateTime?
+
+  @@unique([userId, classId])
+  @@index([classId])
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

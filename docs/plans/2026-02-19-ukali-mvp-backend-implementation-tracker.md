@@ -102,6 +102,8 @@ Implement the locked MVP auth/backend plan end-to-end for Android, iPhone, and A
 - 2026-02-25: Reproduced invite/resend behavior with seeded admin login. Confirmed valid Gmail invite still returns `email rate limit exceeded`; synthetic `example.net` addresses are rejected as invalid by provider; resend fallback can surface `A user with this email address has already been registered` when OTP resend fails for existing identities.
 - 2026-02-25: Patched backend invite/resend error handling to return explicit status/code mapping (`429 INVITE_RATE_LIMITED`, `422 INVITE_EMAIL_INVALID`, `409 INVITE_ALREADY_REGISTERED`) and to fallback from resend->invite only when resend indicates user-not-found.
 - 2026-02-25: Removed mobile member payment action CTA and left payments screen in read-only mode to align with admin-only payment scope.
+- 2026-02-25: Ran deployment env preflight and confirmed required keys are present in `backend/.env`, `admin/.env`, and `mobile/.env`.
+- 2026-02-25: Created initial repository commit (`ea45be0`) after confirming `.env` files were excluded by `.gitignore`.
 
 ## Local Smoke Run (2026-02-19)
 

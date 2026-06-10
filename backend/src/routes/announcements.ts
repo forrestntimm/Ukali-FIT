@@ -23,7 +23,11 @@ router.get("/", requireAuth, async (_req, res) => {
 
 router.post("/", requireAuth, requireRole("ADMIN"), validate(createSchema), async (req, res) => {
   const announcement = await createAnnouncement(req.body);
-  await sendAnnouncementNotification(announcement.title);
+  await sendAnnouncementNotification({
+    announcementId: announcement.id,
+    title: announcement.title,
+    body: announcement.body
+  });
   return res.status(201).json(announcement);
 });
 

@@ -1,6 +1,7 @@
 import { PaymentMethod, PaymentState, PaymentStatus } from "@prisma/client";
 import Stripe from "stripe";
 import { prisma } from "../utils/prisma";
+import { getPaymentPlan, type PaymentPlan } from "./paymentPlans";
 import { config } from "../utils/config";
 
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey, { apiVersion: "2024-06-20" }) : null;
@@ -27,26 +28,55 @@ export async function createStripePaymentIntent(userId: string, amount: number) 
   return paymentIntent;
 }
 
-export async function markManualPayment(userId: string, amount: number, date?: Date) {
+export async function markManualPayment(
+  userId: string,
+  input: {
+    planCode: string;
+    quantity?: number;
+    date?: Date;
+  }
+) {
+  const plan = getPaymentPlan(input.planCode);
+  if (!plan) {
+    throw new Error("Unknown payment plan");
+  }
+
+  const quantity = plan.quantityEnabled ? Math.max(1, input.quantity || 1) : 1;
+  const paidAt = input.date || new Date();
+  const amount = plan.amount * quantity;
   const payment = await prisma.payment.create({
     data: {
       userId,
       amount,
+      planCode: plan.code,
+      planName: plan.name,
+      quantity,
       method: PaymentMethod.CASH,
       status: PaymentState.SUCCESS,
-      date: date || new Date()
+      date: paidAt
     }
   });
 
-  await updateUserPaymentStatus(userId, PaymentMethod.CASH);
+  await updateUserPaymentStatus(userId, PaymentMethod.CASH, plan, paidAt);
   return payment;
 }
 
-export async function updateUserPaymentStatus(userId: string, method: PaymentMethod) {
-  const nextPaymentDue = addMonths(new Date(), 1);
+export async function updateUserPaymentStatus(
+  userId: string,
+  method: PaymentMethod,
+  plan?: PaymentPlan,
+  paidAt = new Date()
+) {
+  const effectivePlan = plan || getPaymentPlan("MONTHLY");
+  if (!effectivePlan) {
+    throw new Error("Monthly payment plan is not configured");
+  }
+
+  const nextPaymentDue = calculateNextPaymentDue(effectivePlan, paidAt);
   return prisma.user.update({
     where: { id: userId },
     data: {
+      membershipStart: paidAt,
       paymentStatus: PaymentStatus.PAID,
       paymentMethod: method,
       nextPaymentDue
@@ -93,6 +123,34 @@ function addMonths(date: Date, months: number) {
   const copy = new Date(date.getTime());
   copy.setMonth(copy.getMonth() + months);
   return copy;
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function addYears(date: Date, years: number) {
+  const copy = new Date(date.getTime());
+  copy.setFullYear(copy.getFullYear() + years);
+  return copy;
+}
+
+function calculateNextPaymentDue(plan: PaymentPlan, paidAt: Date) {
+  if (plan.durationUnit === "DAY") {
+    return addDays(paidAt, plan.durationCount);
+  }
+
+  if (plan.durationUnit === "WEEK") {
+    return addDays(paidAt, plan.durationCount * 7);
+  }
+
+  if (plan.durationUnit === "YEAR") {
+    return addYears(paidAt, plan.durationCount);
+  }
+
+  return addMonths(paidAt, plan.durationCount);
 }
 
 export async function markOverdueMembers() {

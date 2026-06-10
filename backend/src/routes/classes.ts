@@ -3,7 +3,18 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/role";
 import { validate } from "../middleware/validate";
-import { checkInMemberForClass, createClass, listUpcomingClasses, listClassSignups, signUpForClass, updateClassStatus } from "../services/classService";
+import {
+  assignClassCoach,
+  checkInMemberForClass,
+  createClass,
+  getWorkoutForClass,
+  listAssignedClassSummaries,
+  listUpcomingClassSummaries,
+  listUpcomingClasses,
+  listClassSignups,
+  signUpForClass,
+  updateClassStatus
+} from "../services/classService";
 
 const router = Router();
 
@@ -11,7 +22,8 @@ const createSchema = z.object({
   body: z.object({
     title: z.string().min(2),
     datetime: z.string().datetime(),
-    capacity: z.number().int().min(1)
+    capacity: z.number().int().min(1),
+    coachId: z.string().uuid()
   })
 });
 
@@ -21,20 +33,43 @@ const statusSchema = z.object({
   })
 });
 
-const checkInSchema = z.object({
+const assignCoachSchema = z.object({
   body: z.object({
-    qrCode: z.string().min(1)
+    coachId: z.string().uuid()
   })
 });
 
-router.get("/", requireAuth, async (_req, res) => {
-  const classes = await listUpcomingClasses();
+const checkInSchema = z.object({
+  body: z.object({
+    qrCode: z.string().min(1),
+    weight: z.string().max(40).optional(),
+    completionTime: z.string().max(40).optional(),
+    movementScales: z.string().max(500).optional(),
+    coachNotes: z.string().max(1000).optional()
+  })
+});
+
+router.get("/", requireAuth, async (req, res) => {
+  const mine = req.query.mine === "true";
+  const summary = req.query.summary === "true";
+  const limit = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : undefined;
+  const queryCoachId = typeof req.query.coachId === "string" ? req.query.coachId : undefined;
+  const coachId = mine ? req.user!.id : queryCoachId;
+  if (mine && summary && coachId) {
+    const classes = await listAssignedClassSummaries({ coachId, limit });
+    return res.json(classes);
+  }
+  if (summary) {
+    const classes = await listUpcomingClassSummaries({ limit });
+    return res.json(classes);
+  }
+  const classes = await listUpcomingClasses({ coachId });
   return res.json(classes);
 });
 
 router.post("/", requireAuth, requireRole("ADMIN"), validate(createSchema), async (req, res) => {
-  const { title, datetime, capacity } = req.body;
-  const klass = await createClass({ title, datetime: new Date(datetime), capacity });
+  const { title, datetime, capacity, coachId } = req.body;
+  const klass = await createClass({ title, datetime: new Date(datetime), capacity, coachId });
   return res.status(201).json(klass);
 });
 
@@ -55,9 +90,20 @@ router.get("/:id/signups", requireAuth, requireRole("ADMIN"), async (req, res) =
   return res.json(signups);
 });
 
+router.get("/:id/workout", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const workout = await getWorkoutForClass(req.params.id);
+  return res.json(workout);
+});
+
 router.post("/:id/checkin", requireAuth, requireRole("ADMIN"), validate(checkInSchema), async (req, res) => {
   try {
-    const result = await checkInMemberForClass(req.params.id, req.body.qrCode);
+    const { qrCode, weight, completionTime, movementScales, coachNotes } = req.body;
+    const result = await checkInMemberForClass(req.params.id, qrCode, {
+      weight,
+      completionTime,
+      movementScales,
+      coachNotes
+    }, req.user!.id);
     return res.json(result);
   } catch (err: any) {
     return res.status(err?.status || 400).json({
@@ -69,6 +115,11 @@ router.post("/:id/checkin", requireAuth, requireRole("ADMIN"), validate(checkInS
 
 router.patch("/:id/status", requireAuth, requireRole("ADMIN"), validate(statusSchema), async (req, res) => {
   const updated = await updateClassStatus(req.params.id, req.body.status);
+  return res.json(updated);
+});
+
+router.patch("/:id/coach", requireAuth, requireRole("ADMIN"), validate(assignCoachSchema), async (req, res) => {
+  const updated = await assignClassCoach(req.params.id, req.body.coachId);
   return res.json(updated);
 });
 

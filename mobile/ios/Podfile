@@ -37,7 +37,7 @@ elsif podfile_properties.key?('ios.flipper') then
   end
 end
 
-target 'UkaliGym' do
+target 'UkaliAdmin' do
   use_expo_modules!
   config = use_native_modules!
 
@@ -59,28 +59,6 @@ target 'UkaliGym' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
-
-    # Fix React Native script phases when project path contains spaces.
-    # RN generates: /bin/sh -c "$WITH_ENVIRONMENT $SCRIPT_PHASES_SCRIPT"
-    # which splits paths; quote both arguments explicitly.
-    installer.pods_project.targets.each do |target|
-      target.shell_script_build_phases.each do |phase|
-        script = phase.shell_script
-        next unless script
-
-        script = script.gsub(
-          '/bin/sh -c "$WITH_ENVIRONMENT $SCRIPT_PHASES_SCRIPT"',
-          '/bin/sh -c "\\"$WITH_ENVIRONMENT\\" \\"$SCRIPT_PHASES_SCRIPT\\""'
-        )
-
-        script = script.gsub(
-          'bash -l -c "$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh"',
-          'bash "$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh"'
-        )
-
-        phase.shell_script = script
-      end
-    end
 
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.

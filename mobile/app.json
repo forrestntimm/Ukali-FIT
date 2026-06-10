@@ -5,13 +5,16 @@
     "scheme": "ukali",
     "version": "1.0.0",
     "sdkVersion": "50.0.0",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/wallpaper-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#0D1117"
     },
     "updates": {
       "fallbackToCacheTimeout": 0
@@ -24,10 +27,13 @@
         }
       ]
     ],
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "bundleIdentifier": "com.ukalifit.app",
-      "supportsTablet": true
+      "bundleIdentifier": "com.forresttimm.ukalifit",
+      "supportsTablet": true,
+      "buildNumber": "49"
     },
     "android": {
       "adaptiveIcon": {

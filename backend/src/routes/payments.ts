@@ -4,9 +4,11 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/role";
 import { validate } from "../middleware/validate";
 import { createStripePaymentIntent, listPaymentsByUser, markManualPayment } from "../services/paymentService";
+import { PAYMENT_PLANS, listPaymentPlans } from "../services/paymentPlans";
 import { config } from "../utils/config";
 
 const router = Router();
+const paymentPlanCodes = PAYMENT_PLANS.map((plan) => plan.code) as [string, ...string[]];
 
 const intentSchema = z.object({
   body: z.object({
@@ -17,7 +19,8 @@ const intentSchema = z.object({
 const manualSchema = z.object({
   body: z.object({
     userId: z.string().uuid(),
-    amount: z.number().int().min(100),
+    planCode: z.enum(paymentPlanCodes),
+    quantity: z.number().int().min(1).max(50).optional(),
     date: z.string().datetime().optional()
   })
 });
@@ -36,9 +39,17 @@ router.post("/intent", requireAuth, validate(intentSchema), async (req, res) => 
   return res.json({ clientSecret: intent.client_secret });
 });
 
+router.get("/plans", requireAuth, async (_req, res) => {
+  return res.json(listPaymentPlans());
+});
+
 router.post("/manual", requireAuth, requireRole("ADMIN"), validate(manualSchema), async (req, res) => {
-  const { userId, amount, date } = req.body;
-  const payment = await markManualPayment(userId, amount, date ? new Date(date) : undefined);
+  const { userId, planCode, quantity, date } = req.body;
+  const payment = await markManualPayment(userId, {
+    planCode,
+    quantity,
+    date: date ? new Date(date) : undefined
+  });
   return res.status(201).json(payment);
 });
 

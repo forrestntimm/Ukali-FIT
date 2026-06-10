@@ -22,6 +22,10 @@ body {
   background: radial-gradient(circle at top, #1f2937 0%, #0a0f1f 55%);
 }
 
+#root {
+  min-height: 100vh;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -94,6 +98,78 @@ input, select, textarea {
   border: 1px solid #1c2742;
 }
 
+.branded-splash {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(31, 41, 55, 0.72) 0%, rgba(10, 15, 31, 0.94) 58%),
+    linear-gradient(180deg, #101827 0%, #0a0f1f 100%);
+}
+
+.branded-splash-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(249, 115, 22, 0.14), transparent 32%),
+    radial-gradient(circle at 80% 0%, rgba(254, 215, 170, 0.08), transparent 24%);
+}
+
+.branded-splash-logo {
+  position: absolute;
+  inset: auto;
+  width: min(78vw, 540px);
+  opacity: 0.13;
+  filter: saturate(0.92);
+  pointer-events: none;
+  user-select: none;
+}
+
+.branded-splash-shell {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 540px);
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  text-align: center;
+}
+
+.branded-splash-copy {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.branded-splash-title {
+  margin: 0;
+  font-size: clamp(2.2rem, 6vw, 3.25rem);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+}
+
+.branded-splash-subtitle {
+  margin: 0;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.branded-splash-content {
+  width: 100%;
+}
+
+.branded-splash-panel {
+  width: 100%;
+  background: rgba(17, 23, 42, 0.86);
+  border: 1px solid rgba(34, 49, 83, 0.92);
+  box-shadow: 0 24px 80px rgba(3, 6, 15, 0.42);
+  backdrop-filter: blur(12px);
+}
+
 .grid {
   display: grid;
   gap: 16px;
@@ -101,6 +177,15 @@ input, select, textarea {
 
 .grid-2 {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.grid-members {
+  grid-template-columns: minmax(320px, 3fr) minmax(520px, 5fr);
+}
+
+.grid-wod {
+  grid-template-columns: minmax(320px, 420px) minmax(420px, 1fr);
+  align-items: start;
 }
 
 .badge {
@@ -136,6 +221,51 @@ input, select, textarea {
   font-weight: 600;
 }
 
+.schedule-grid-table td,
+.schedule-grid-table th {
+  vertical-align: top;
+}
+
+.schedule-empty-cell {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.schedule-coach-cell {
+  display: grid;
+  gap: 8px;
+  min-height: 64px;
+}
+
+.schedule-coach-name {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.schedule-coach-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-inline-btn {
+  align-self: flex-start;
+  background: rgba(20, 28, 51, 0.92);
+  border: 1px solid #2b375c;
+  color: var(--primary-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.schedule-inline-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .primary-btn {
   background: var(--primary);
   border: none;
@@ -155,6 +285,73 @@ input, select, textarea {
   cursor: pointer;
 }
 
+.payment-plan-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.payment-plan-group {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-plan-group-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.payment-plan-options {
+  display: grid;
+  gap: 10px;
+}
+
+.payment-plan-option {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #253253;
+  background: var(--bg-soft);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.payment-plan-option:hover {
+  border-color: #3b4d78;
+  background: #18223d;
+  transform: translateY(-1px);
+}
+
+.payment-plan-option.active {
+  border-color: var(--primary);
+  background: rgba(249, 115, 22, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.2);
+}
+
+.payment-plan-option-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.payment-plan-option-price {
+  color: var(--primary-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.payment-plan-option-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 @media (max-width: 960px) {
   .main-layout {
     grid-template-columns: 1fr;
@@ -164,5 +361,13 @@ input, select, textarea {
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: space-between;
+  }
+
+  .grid-members {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-wod {
+    grid-template-columns: 1fr;
   }
 }

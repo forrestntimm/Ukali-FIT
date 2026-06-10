@@ -7,8 +7,15 @@ function toDate(value: DateInput) {
   return value instanceof Date ? value : new Date(value);
 }
 
+function isValidDate(date: Date) {
+  return !Number.isNaN(date.getTime());
+}
+
 export function toDayKeyInAppTimeZone(value: DateInput) {
   const date = toDate(value);
+  if (!isValidDate(date)) {
+    return "";
+  }
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: APP_TIME_ZONE,
     year: "numeric",
@@ -24,28 +31,48 @@ export function toDayKeyInAppTimeZone(value: DateInput) {
 
 function stableDateFromDayKey(dayKey: string) {
   const [year, month, day] = dayKey.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  const stableDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return isValidDate(stableDate) ? stableDate : null;
 }
 
 export function formatDayLabelInAppTimeZone(dayKey: string) {
+  const date = stableDateFromDayKey(dayKey);
+  if (!date) {
+    return dayKey || "Unknown day";
+  }
+
   return new Intl.DateTimeFormat(APP_LOCALE, {
     timeZone: APP_TIME_ZONE,
     weekday: "short",
     month: "short",
     day: "numeric"
-  }).format(stableDateFromDayKey(dayKey));
+  }).format(date);
 }
 
 export function formatDateInAppTimeZone(value: DateInput) {
+  const date = toDate(value);
+  if (!isValidDate(date)) {
+    return typeof value === "string" && value.trim().length > 0 ? value : "Unknown date";
+  }
+
   return new Intl.DateTimeFormat(APP_LOCALE, {
     timeZone: APP_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).format(toDate(value));
+  }).format(date);
 }
 
 export function formatDateTimeInAppTimeZone(value: DateInput) {
+  const date = toDate(value);
+  if (!isValidDate(date)) {
+    return typeof value === "string" && value.trim().length > 0 ? value : "Unknown time";
+  }
+
   return new Intl.DateTimeFormat(APP_LOCALE, {
     timeZone: APP_TIME_ZONE,
     weekday: "short",
@@ -54,5 +81,5 @@ export function formatDateTimeInAppTimeZone(value: DateInput) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true
-  }).format(toDate(value));
+  }).format(date);
 }

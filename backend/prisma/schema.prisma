@@ -41,6 +41,7 @@ model User {
   profileImageDataUrl String?
   age              Int?
   fitnessGoals     String?
+  personalRecords  Json?
   email            String         @unique
   phone            String?
   checkInQrCode    String         @unique @default(uuid())
@@ -54,11 +55,20 @@ model User {
   inviteSentAt     DateTime?
   inviteAcceptedAt DateTime?
   lastLoginAt      DateTime?
+  webAccessApproved Boolean        @default(false)
+  webAccessApprovedAt DateTime?
+  webAccessApprovedById String?
+  webAccessApprovedBy User?        @relation("WebAccessApprover", fields: [webAccessApprovedById], references: [id])
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
   payments         Payment[]
   classSignups     ClassSignup[]
+  coachingAssignments Class[]      @relation("ClassCoach")
+  secondaryCoachingAssignments Class[] @relation("ClassSecondaryCoach")
+  workoutLogs      WorkoutLog[]
+  coachedSessions  CoachClassSession[]
+  approvedUsers    User[]         @relation("WebAccessApprover")
   deviceTokens     DeviceToken[]
 
   @@index([role])
@@ -71,6 +81,9 @@ model Payment {
   user                   User          @relation(fields: [userId], references: [id])
   userId                 String
   amount                 Int
+  planCode               String?
+  planName               String?
+  quantity               Int           @default(1)
   method                 PaymentMethod
   status                 PaymentState  @default(PENDING)
   date                   DateTime      @default(now())
@@ -85,6 +98,7 @@ model Workout {
   date        DateTime  @unique
   description String
   createdAt   DateTime  @default(now())
+  workoutLogs WorkoutLog[]
 
   @@index([date])
 }
@@ -94,12 +108,20 @@ model Class {
   title     String
   datetime  DateTime
   capacity  Int
+  coach     User?        @relation("ClassCoach", fields: [coachId], references: [id])
+  coachId   String?
+  secondaryCoach User?   @relation("ClassSecondaryCoach", fields: [secondaryCoachId], references: [id])
+  secondaryCoachId String?
   status    ClassStatus  @default(OPEN)
   createdAt DateTime     @default(now())
 
   signups   ClassSignup[]
+  workoutLogs WorkoutLog[]
+  coachedSessions CoachClassSession[]
 
   @@index([datetime])
+  @@index([coachId])
+  @@index([secondaryCoachId])
 }
 
 model ClassSignup {
@@ -112,6 +134,41 @@ model ClassSignup {
   checkedInAt DateTime?
 
   @@unique([userId, classId])
+  @@index([classId])
+}
+
+model WorkoutLog {
+  id             String    @id @default(uuid())
+  user           User      @relation(fields: [userId], references: [id])
+  userId         String
+  class          Class     @relation(fields: [classId], references: [id])
+  classId        String
+  workout        Workout?  @relation(fields: [workoutId], references: [id])
+  workoutId      String?
+  checkedInAt    DateTime
+  weight         String?
+  completionTime String?
+  movementScales String?
+  coachNotes     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, classId])
+  @@index([userId, checkedInAt])
+  @@index([classId])
+  @@index([workoutId])
+}
+
+model CoachClassSession {
+  id        String   @id @default(uuid())
+  coach     User     @relation(fields: [coachId], references: [id])
+  coachId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  classId   String
+  createdAt DateTime @default(now())
+
+  @@unique([coachId, classId])
+  @@index([coachId])
   @@index([classId])
 }
 
@@ -131,6 +188,7 @@ model DeviceToken {
   userId    String
   token     String   @unique
   platform  String
+  badgeCount Int     @default(0)
   createdAt DateTime @default(now())
 
   @@index([userId])

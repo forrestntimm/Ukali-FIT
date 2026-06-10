@@ -1,0 +1,58 @@
+{
+  "cli": {
+    "version": ">= 18.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "athlete-preview": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "APP_VARIANT": "athlete",
+        "EXPO_PUBLIC_APP_VARIANT": "athlete",
+        "EXPO_PUBLIC_MAGIC_LINK_REDIRECT_URL": "ukali://auth/callback"
+      }
+    },
+    "coach-preview": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "APP_VARIANT": "coach",
+        "EXPO_PUBLIC_APP_VARIANT": "coach",
+        "EXPO_PUBLIC_MAGIC_LINK_REDIRECT_URL": "ukali-coach://auth/callback"
+      }
+    },
+    "athlete-production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "environment": "production",
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-16.4"
+      },
+      "env": {
+        "APP_VARIANT": "athlete",
+        "EXPO_PUBLIC_APP_VARIANT": "athlete",
+        "EXPO_PUBLIC_MAGIC_LINK_REDIRECT_URL": "ukali://auth/callback"
+      }
+    },
+    "coach-production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "environment": "production",
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-16.4"
+      },
+      "env": {
+        "APP_VARIANT": "coach",
+        "EXPO_PUBLIC_APP_VARIANT": "coach",
+        "EXPO_PUBLIC_MAGIC_LINK_REDIRECT_URL": "ukali-coach://auth/callback"
+      }
+    }
+  },
+  "submit": {
+    "athlete-production": {},
+    "coach-production": {}
+  }
+}

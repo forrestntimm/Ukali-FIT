@@ -13,9 +13,9 @@ export default function CoachAccessScreen() {
     <View style={styles.screen}>
       <TabWallpaper />
       <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
-        <Text style={styles.title}>Coach Access Required</Text>
+        <Text style={styles.title}>Admin Access Required</Text>
         <Text style={styles.subtitle}>
-          This app is for coach/admin accounts only. Sign in with a coach account to continue.
+          This app is for admin accounts only. Sign in with an admin account to continue.
         </Text>
         <TouchableOpacity style={styles.button} onPress={() => void signOut()}>
           <Text style={styles.buttonText}>Sign Out</Text>

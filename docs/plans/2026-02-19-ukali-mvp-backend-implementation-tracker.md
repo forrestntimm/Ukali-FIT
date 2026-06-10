@@ -86,6 +86,7 @@ Implement the locked MVP auth/backend plan end-to-end for Android, iPhone, and A
 - [x] Non-break-glass admin email: password fallback is rejected.
 - [ ] Admin: invite member and resend invite from Members page.
 - [x] Member payment screens/routes remain disabled for members (API-level verification).
+- Note: invite/resend API checks now pass as of 2026-02-28 (`invite=201`; `resend=200` after provider cooldown). Members-page click-path still needs manual browser validation.
 
 ## Change Log
 - 2026-02-19: Tracker created.
@@ -104,6 +105,17 @@ Implement the locked MVP auth/backend plan end-to-end for Android, iPhone, and A
 - 2026-02-25: Removed mobile member payment action CTA and left payments screen in read-only mode to align with admin-only payment scope.
 - 2026-02-25: Ran deployment env preflight and confirmed required keys are present in `backend/.env`, `admin/.env`, and `mobile/.env`.
 - 2026-02-25: Created initial repository commit (`ea45be0`) after confirming `.env` files were excluded by `.gitignore`.
+- 2026-02-28: Initialized `supabase/` CLI workspace, linked project `xdpyaytnqxqannsxeopr`, and added baseline security/policy audit migration `20260228232000`.
+- 2026-02-28: Applied migration to remote via `supabase db push`; migration history now shows local and remote in sync (`20260228232000`).
+- 2026-02-28: Re-ran readiness checks: backend build, admin build, and mobile TypeScript compile pass.
+- 2026-02-28: Re-ran invite/resend API smoke with break-glass admin. Invite succeeded (`201`). Immediate resend hit provider cooldown, then succeeded (`200`) after wait interval.
+- 2026-02-28: Ran browser automation smoke for admin web login. Break-glass sign-in reaches Dashboard successfully on `http://localhost:5173`.
+- 2026-02-28: Members-page UI invite flow is currently constrained by Supabase provider throttling (`429 INVITE_RATE_LIMITED: email rate limit exceeded`).
+- 2026-02-28: Members-page resend on some locally-created users returned `400 INVITE_RESEND_FAILED` with provider message `Signups not allowed for otp`; this was a resend path edge case when no auth identity exists for that email.
+- 2026-02-28: Patched resend flow to route users with no linked `supabaseUserId` through admin invite API (instead of OTP resend), and extended fallback matching for `Signups not allowed for otp`.
+- 2026-02-28: Updated CORS configuration to accept localhost aliases automatically and aligned env defaults to include `http://localhost:5173`, `http://127.0.0.1:5173`, and `https://admin.ukali.app`.
+- 2026-02-28: Added admin Members-page rate-limit UX: invite/resend buttons now enter cooldown with visible countdown after `429 INVITE_RATE_LIMITED` or provider cooldown messages.
+- 2026-02-28: Added coach/admin mobile navigation flow and management screens for dashboard, members, classes, payments, announcements, and WOD while keeping existing backend API parity.
 
 ## Local Smoke Run (2026-02-19)
 
@@ -137,7 +149,7 @@ Implement the locked MVP auth/backend plan end-to-end for Android, iPhone, and A
 - [x] Replace DB host with the current Supabase project connection host (or pooled host) and verify DNS resolution.
 - [x] Add remaining Supabase backend secret (`SUPABASE_SERVICE_ROLE_KEY`) to `backend/.env`.
 - [x] Fix Supabase mobile redirect config (`ukali://auth/callback`) and rerun deep-link tests on iPhone/Android.
-- [ ] Wait for/reset Supabase email rate limit and rerun invite + resend invite endpoint tests.
+- [x] Wait for/reset Supabase email rate limit and rerun invite + resend invite endpoint tests.
 - [x] Investigate resend failure path and capture exact provider responses (`email rate limit exceeded`, `Email address ... is invalid`, and fallback `A user with this email address has already been registered`).
 - [x] Resume invite/resend retry run on February 20, 2026.
 
@@ -179,3 +191,14 @@ Implement the locked MVP auth/backend plan end-to-end for Android, iPhone, and A
 ### Attempt outcomes
 - Attempt 1: `invite=201` then `resend=400` with `INVITE_RESEND_FAILED` (`Email address "...@gmail.com" is invalid`).
 - Attempts 2-6: `invite=400` with `INVITE_FAILED` (`email rate limit exceeded`), so resend not attempted.
+
+## Invite/Resend Recheck (2026-02-28)
+
+### Summary
+- Invite with seeded admin auth: `201` (`INVITE` success)
+- Immediate resend for same user: `400 INVITE_RESEND_FAILED` (`For security purposes, you can only request this after 43 seconds.`)
+- Resend after cooldown wait: `200` (`resent=true`)
+
+### Conclusion
+- Endpoint behavior is now stable for admin invite flows.
+- Remaining validation is UI-level execution from the Admin Members page and full magic-link completion in browser/device.

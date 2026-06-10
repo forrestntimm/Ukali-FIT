@@ -117,7 +117,8 @@ export async function resolveLocalUserFromSupabaseToken(
     authUser: {
       id: localAuthUser.id,
       role: localAuthUser.role,
-      email: localAuthUser.email
+      email: localAuthUser.email,
+      webAccessApproved: localAuthUser.webAccessApproved
     }
   };
 }

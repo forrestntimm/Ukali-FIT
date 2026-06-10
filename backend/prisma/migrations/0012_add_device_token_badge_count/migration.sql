@@ -1,0 +1,2 @@
+ALTER TABLE "DeviceToken"
+ADD COLUMN "badgeCount" INTEGER NOT NULL DEFAULT 0;

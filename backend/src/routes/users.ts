@@ -2,13 +2,41 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/role";
+import { otpLimiter, passwordLimiter } from "../middleware/rateLimit";
 import { validate } from "../middleware/validate";
-import { createUser, listUsers, updateUser, deleteUser, getUserById } from "../services/userService";
+import {
+  createUser,
+  listCoachUsers,
+  listMemberOptions,
+  getMemberDashboardStats,
+  listUsers,
+  updateUser,
+  deleteUser,
+  getUserById,
+  listWorkoutLogsByUser,
+  countClassesCoachedByUser,
+  approveUserWebAccess
+} from "../services/userService";
 import { prisma } from "../utils/prisma";
 import { resendMagicLink, sendInviteEmail, setSupabasePasswordForLocalUser } from "../services/supabaseAuthService";
-import { config } from "../utils/config";
+import { config, resolveAllowedCallbackUrl } from "../utils/config";
 
 const router = Router();
+
+const personalRecordsSchema = z
+  .object({
+    deadlift: z.string().max(60).nullable().optional(),
+    backSquat: z.string().max(60).nullable().optional(),
+    frontSquat: z.string().max(60).nullable().optional(),
+    cleans: z.string().max(60).nullable().optional(),
+    pushPress: z.string().max(60).nullable().optional(),
+    strictPress: z.string().max(60).nullable().optional(),
+    pushJerk: z.string().max(60).nullable().optional(),
+    benchPress: z.string().max(60).nullable().optional(),
+    oneMileRun: z.string().max(60).nullable().optional(),
+    fiveKilometerRun: z.string().max(60).nullable().optional()
+  })
+  .optional();
 
 function mapInviteError(message?: string) {
   const normalized = (message || "").toLowerCase();
@@ -29,7 +57,8 @@ function shouldFallbackToInvite(message?: string) {
   return (
     normalized.includes("user not found") ||
     normalized.includes("user does not exist") ||
-    normalized.includes("email not found")
+    normalized.includes("email not found") ||
+    normalized.includes("signups not allowed for otp")
   );
 }
 
@@ -84,9 +113,11 @@ const inviteSchema = z.object({
 
 const updateMeSchema = z.object({
   body: z.object({
+    name: z.string().min(2).max(120).optional(),
     profileImageDataUrl: z.string().max(750000).nullable().optional(),
     age: z.number().int().min(1).max(120).nullable().optional(),
-    fitnessGoals: z.string().max(500).nullable().optional()
+    fitnessGoals: z.string().max(500).nullable().optional(),
+    personalRecords: personalRecordsSchema
   })
 });
 
@@ -106,14 +137,28 @@ router.patch("/me", requireAuth, validate(updateMeSchema), async (req, res) => {
   const userId = req.user!.id;
   const data = req.body;
   const user = await updateUser(userId, {
+    name: data.name,
     profileImageDataUrl: data.profileImageDataUrl,
     age: data.age,
-    fitnessGoals: data.fitnessGoals
+    fitnessGoals: data.fitnessGoals,
+    personalRecords: data.personalRecords
   });
   return res.json(user);
 });
 
-router.post("/me/password", requireAuth, validate(updateMyPasswordSchema), async (req, res) => {
+router.get("/me/workout-logs", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const logs = await listWorkoutLogsByUser(userId);
+  return res.json(logs);
+});
+
+router.get("/me/coach-stats", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const classesCoached = await countClassesCoachedByUser(userId);
+  return res.json({ classesCoached });
+});
+
+router.post("/me/password", requireAuth, passwordLimiter, validate(updateMyPasswordSchema), async (req, res) => {
   const userId = req.user!.id;
   const { password } = req.body;
   await setSupabasePasswordForLocalUser(userId, password);
@@ -123,6 +168,21 @@ router.post("/me/password", requireAuth, validate(updateMyPasswordSchema), async
 router.get("/", requireAuth, requireRole("ADMIN"), async (_req, res) => {
   const users = await listUsers();
   return res.json(users);
+});
+
+router.get("/member-options", requireAuth, requireRole("ADMIN"), async (_req, res) => {
+  const members = await listMemberOptions();
+  return res.json(members);
+});
+
+router.get("/stats", requireAuth, requireRole("ADMIN"), async (_req, res) => {
+  const stats = await getMemberDashboardStats();
+  return res.json(stats);
+});
+
+router.get("/coaches", requireAuth, requireRole("ADMIN"), async (_req, res) => {
+  const coaches = await listCoachUsers();
+  return res.json(coaches);
 });
 
 router.post("/", requireAuth, requireRole("ADMIN"), validate(createSchema), async (req, res) => {
@@ -135,11 +195,11 @@ router.post("/", requireAuth, requireRole("ADMIN"), validate(createSchema), asyn
   return res.status(201).json(user);
 });
 
-router.post("/invite", requireAuth, requireRole("ADMIN"), validate(inviteSchema), async (req, res) => {
+router.post("/invite", requireAuth, requireRole("ADMIN"), otpLimiter, validate(inviteSchema), async (req, res) => {
   try {
     const data = req.body;
     const normalizedEmail = data.email.toLowerCase();
-    const redirectTo = data.redirectTo || config.mobileCallbackUrl;
+    const redirectTo = resolveAllowedCallbackUrl(data.redirectTo, config.mobileCallbackUrl);
 
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
@@ -177,10 +237,8 @@ router.post("/invite", requireAuth, requireRole("ADMIN"), validate(inviteSchema)
     }
 
     await sendInviteEmail(normalizedEmail, redirectTo);
-    const safeUser = await getUserById(user.id);
     return res.status(201).json({
-      user: safeUser,
-      invite: { sent: true, redirectTo }
+      invite: { sent: true, redirectTo, userId: user.id, email: normalizedEmail }
     });
   } catch (err: any) {
     const message = err?.message || "Failed to send invite";
@@ -192,20 +250,29 @@ router.post("/invite", requireAuth, requireRole("ADMIN"), validate(inviteSchema)
   }
 });
 
-router.post("/:id/resend-invite", requireAuth, requireRole("ADMIN"), async (req, res) => {
+router.post("/:id/resend-invite", requireAuth, requireRole("ADMIN"), otpLimiter, async (req, res) => {
   try {
     const { id } = req.params;
-    const redirectTo = typeof req.query.redirectTo === "string" ? req.query.redirectTo : config.mobileCallbackUrl;
+    const redirectTo = resolveAllowedCallbackUrl(
+      typeof req.query.redirectTo === "string" ? req.query.redirectTo : undefined,
+      config.mobileCallbackUrl
+    );
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return res.status(404).json({ code: "NOT_FOUND", message: "User not found" });
 
-    try {
-      await resendMagicLink(user.email, redirectTo);
-    } catch (resendErr: any) {
-      if (!shouldFallbackToInvite(resendErr?.message)) {
-        throw resendErr;
-      }
+    // Users without a linked Supabase identity should always be re-invited through admin API.
+    // OTP resend with shouldCreateUser=false can fail with provider-side signup constraints.
+    if (!user.supabaseUserId) {
       await sendInviteEmail(user.email, redirectTo);
+    } else {
+      try {
+        await resendMagicLink(user.email, redirectTo);
+      } catch (resendErr: any) {
+        if (!shouldFallbackToInvite(resendErr?.message)) {
+          throw resendErr;
+        }
+        await sendInviteEmail(user.email, redirectTo);
+      }
     }
 
     return res.json({ invite: { resent: true, redirectTo } });
@@ -217,6 +284,35 @@ router.post("/:id/resend-invite", requireAuth, requireRole("ADMIN"), async (req,
       message: err?.message || "Failed to resend invite"
     });
   }
+});
+
+router.post("/:id/approve-web-access", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const approverId = req.user!.id;
+  const targetUserId = req.params.id;
+
+  const approver = (await getUserById(approverId)) as any;
+  if (!approver?.webAccessApproved) {
+    return res.status(403).json({
+      code: "AUTH_APPROVER_NOT_ALLOWED",
+      message: "Only already approved members can grant web access."
+    });
+  }
+
+  const target = (await getUserById(targetUserId)) as any;
+  if (!target) {
+    return res.status(404).json({ code: "NOT_FOUND", message: "User not found" });
+  }
+
+  if (target.webAccessApproved) {
+    return res.json({
+      approval: { approved: true, alreadyApproved: true, userId: targetUserId }
+    });
+  }
+
+  await approveUserWebAccess(targetUserId, approverId);
+  return res.json({
+    approval: { approved: true, approvedByUserId: approverId }
+  });
 });
 
 router.patch("/:id", requireAuth, requireRole("ADMIN"), validate(updateSchema), async (req, res) => {
@@ -240,6 +336,18 @@ router.get("/:id/payments", requireAuth, requireRole("ADMIN"), async (req, res) 
   const { id } = req.params;
   const payments = await prisma.payment.findMany({ where: { userId: id }, orderBy: { date: "desc" } });
   return res.json(payments);
+});
+
+router.get("/:id/workout-logs", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const { id } = req.params;
+  const logs = await listWorkoutLogsByUser(id);
+  return res.json(logs);
+});
+
+router.get("/:id/coach-stats", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const { id } = req.params;
+  const classesCoached = await countClassesCoachedByUser(id);
+  return res.json({ classesCoached });
 });
 
 export default router;

@@ -7,6 +7,7 @@ export interface AuthRequest extends Request {
     id: string;
     role: "ADMIN" | "MEMBER";
     email?: string;
+    webAccessApproved?: boolean;
     authProvider?: "legacy" | "supabase";
   };
 }
@@ -46,6 +47,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     id: resolved.authUser.id,
     role: resolved.authUser.role,
     email: resolved.authUser.email,
+    webAccessApproved: resolved.authUser.webAccessApproved,
     authProvider: "supabase"
   };
   return next();

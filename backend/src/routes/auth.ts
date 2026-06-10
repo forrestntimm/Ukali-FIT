@@ -36,6 +36,12 @@ router.post("/bootstrap", async (req, res) => {
     return res.status(401).json({ code: "AUTH_UNAUTHORIZED", message: "Missing or invalid Authorization header" });
   }
 
+  const clientSourceHeader = req.headers["x-ukali-client"];
+  const clientSource = Array.isArray(clientSourceHeader)
+    ? clientSourceHeader[0]?.toLowerCase()
+    : clientSourceHeader?.toLowerCase();
+  const isAdminWebClient = clientSource === "admin-web";
+
   let resolved: Awaited<ReturnType<typeof resolveLocalUserFromSupabaseToken>>;
   try {
     resolved = await resolveLocalUserFromSupabaseToken(token, { markLogin: true });
@@ -53,6 +59,13 @@ router.post("/bootstrap", async (req, res) => {
       });
     }
     return res.status(401).json({ code: "AUTH_UNAUTHORIZED", message: "Invalid or expired token" });
+  }
+
+  if (isAdminWebClient && resolved.authUser.role === "ADMIN" && !resolved.authUser.webAccessApproved) {
+    return res.status(403).json({
+      code: "AUTH_WEB_ACCESS_PENDING",
+      message: "Your web access is pending approval from an existing approved member."
+    });
   }
 
   return res.json({ user: resolved.user });

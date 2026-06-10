@@ -1,26 +1,72 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ScrollView } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ScrollView, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
+import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
+import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 import { formatDateTimeInAppTimeZone, formatDayLabelInAppTimeZone, toDayKeyInAppTimeZone } from "../utils/timezone";
 import { useAuth } from "../context/AuthContext";
 
+type ClassesCacheEnvelope = {
+  classes: any[];
+  savedAt: number;
+};
+
 export default function ClassesScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [classes, setClasses] = useState<any[]>([]);
+  const initialCached = peekScreenCache<any[] | ClassesCacheEnvelope>("classes");
+  const [classes, setClasses] = useState<any[]>(
+    Array.isArray(initialCached) ? initialCached : initialCached?.classes || []
+  );
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [bookingClassId, setBookingClassId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const load = () => {
-    api.get("/classes").then((res) => setClasses(res.data));
-  };
+  const load = useCallback(async () => {
+    const res = await api.get("/classes");
+    setClasses(res.data);
+    await writeScreenCache<ClassesCacheEnvelope>("classes", {
+      classes: res.data,
+      savedAt: Date.now()
+    });
+    setErrorMessage(null);
+  }, []);
+
+  const { refreshNow, seedLoadedAt } = useStaleFocusRefresh(
+    useCallback(async () => {
+      try {
+        await load();
+      } catch (err: any) {
+        setErrorMessage(err?.response?.data?.message || "Could not load class schedule.");
+      }
+    }, [load]),
+    5 * 60 * 1000
+  );
 
   useEffect(() => {
-    load();
-  }, []);
+    void (async () => {
+      const cached = await readScreenCache<any[] | ClassesCacheEnvelope>("classes");
+      if (!cached) return;
+
+      if (Array.isArray(cached)) {
+        if (cached.length) {
+          setClasses(cached);
+        }
+        return;
+      }
+
+      if (cached.classes?.length) {
+        setClasses(cached.classes);
+      }
+      if (cached.savedAt) {
+        seedLoadedAt(cached.savedAt);
+      }
+    })();
+  }, [seedLoadedAt]);
 
   const classesByDay = classes.reduce<Record<string, any[]>>((acc, klass) => {
     const key = toDayKeyInAppTimeZone(klass.datetime);
@@ -45,7 +91,7 @@ export default function ClassesScreen() {
     try {
       await api.post(`/classes/${id}/signup`);
       Alert.alert("Class Reserved", "Your reservation was saved and is now visible to coaches in admin.");
-      load();
+      await load();
     } catch (err: any) {
       Alert.alert(
         "Unable to sign up",
@@ -70,12 +116,24 @@ export default function ClassesScreen() {
 
   const classesForDay = selectedDay ? classesByDay[selectedDay] || [] : [];
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshNow();
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || "Could not refresh classes.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshNow]);
+
   return (
     <View style={styles.screen}>
       <TabWallpaper />
       <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
         <Text style={styles.title}>Class Schedule</Text>
         <Text style={styles.subtitle}>Choose a day and reserve your spot.</Text>
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayMenu}>
           {dayKeys.map((key) => {
             const active = key === selectedDay;
@@ -93,6 +151,7 @@ export default function ClassesScreen() {
         <FlatList
           data={classesForDay}
           keyExtractor={(item) => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textPrimary} />}
           ListEmptyComponent={<Text style={styles.emptyText}>No classes available for this day.</Text>}
           renderItem={({ item }) => {
             const remaining = item.capacity - (item.signups?.length || 0);
@@ -203,5 +262,9 @@ const styles = StyleSheet.create({
   emptyText: {
     color: theme.colors.textSecondary,
     marginTop: 16
+  },
+  errorText: {
+    color: theme.colors.danger,
+    marginBottom: 10
   }
 });

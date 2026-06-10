@@ -1,31 +1,43 @@
-import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Image, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import TabWallpaper from "../components/TabWallpaper";
+import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
+import { buildCheckInQrPayload } from "../lib/checkInQr";
+import { readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 
 export default function DashboardScreen() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [wod, setWod] = useState<any>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const cached = await readScreenCache<{ wod: any | null }>("dashboard");
+      if (cached) {
+        setWod(cached.wod ?? null);
+      }
+    })();
+  }, []);
 
   const loadWod = useCallback(async () => {
     try {
       const res = await api.get("/workouts/today");
       setWod(res.data);
+      await writeScreenCache("dashboard", { wod: res.data ?? null });
     } catch {
       setWod(null);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void refreshUser().catch(() => undefined);
-      void loadWod();
-    }, [refreshUser, loadWod])
+  useStaleFocusRefresh(
+    useCallback(async () => {
+      await loadWod();
+    }, [loadWod]),
+    30000
   );
 
   const nextDue = user?.nextPaymentDue ? new Date(user.nextPaymentDue) : null;
@@ -35,8 +47,9 @@ export default function DashboardScreen() {
   const isPaid = user?.paymentStatus === "PAID";
   const hasWod = Boolean(wod?.description);
   const qrValue = user?.checkInQrCode || "";
-  const qrImageUrl = qrValue
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=${encodeURIComponent(qrValue)}`
+  const qrPayload = buildCheckInQrPayload(qrValue);
+  const qrImageUrl = qrPayload
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=${encodeURIComponent(qrPayload)}`
     : null;
 
   return (
@@ -197,7 +210,7 @@ const styles = StyleSheet.create({
   },
   qrText: {
     color: theme.colors.textPrimary,
-    fontFamily: "Courier",
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
     marginTop: 6
   }
 });

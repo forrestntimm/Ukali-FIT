@@ -1,0 +1,2 @@
+-- Intentionally empty baseline seed.
+-- Application data seeding is managed by backend/prisma/seed.ts.

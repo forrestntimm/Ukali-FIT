@@ -4,17 +4,26 @@
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
-    "start:athlete": "APP_VARIANT=athlete EXPO_PUBLIC_APP_VARIANT=athlete expo start",
-    "start:coach": "APP_VARIANT=coach EXPO_PUBLIC_APP_VARIANT=coach expo start",
+    "start": "bash scripts/require-variant.sh start",
+    "start:athlete": "bash scripts/run-variant.sh athlete start",
+    "start:coach": "bash scripts/run-variant.sh coach start",
     "android": "expo run:android",
-    "android:athlete": "APP_VARIANT=athlete EXPO_PUBLIC_APP_VARIANT=athlete expo run:android",
-    "android:coach": "APP_VARIANT=coach EXPO_PUBLIC_APP_VARIANT=coach expo run:android",
+    "android:athlete": "bash scripts/run-variant.sh athlete android",
+    "android:coach": "bash scripts/run-variant.sh coach android",
     "ios": "expo run:ios",
-    "ios:athlete": "APP_VARIANT=athlete EXPO_PUBLIC_APP_VARIANT=athlete expo run:ios",
-    "ios:coach": "APP_VARIANT=coach EXPO_PUBLIC_APP_VARIANT=coach expo run:ios",
+    "ios:athlete": "bash scripts/run-variant.sh athlete ios",
+    "ios:coach": "bash scripts/run-variant.sh coach ios",
+    "prep:ios:athlete": "bash scripts/run-variant.sh athlete prep-ios",
+    "prep:ios:coach": "bash scripts/run-variant.sh coach prep-ios",
+    "eas:build:local:ios:athlete": "bash scripts/build-local-ios.sh athlete",
+    "eas:build:local:ios:coach": "bash scripts/build-local-ios.sh coach",
+    "eas:build:ios:athlete": "npm run eas:build:local:ios:athlete",
+    "eas:build:ios:coach": "npm run eas:build:local:ios:coach",
+    "eas:submit:ios:athlete": "bash -lc 'if [[ -z \"${IPA_PATH:-}\" || \"$IPA_PATH\" != /*.ipa ]]; then echo \"IPA_PATH must be set to an absolute .ipa path\" >&2; exit 1; fi; npx eas-cli submit --platform ios --profile athlete-production --path \"$IPA_PATH\" --non-interactive --no-wait'",
+    "eas:submit:ios:coach": "bash -lc 'if [[ -z \"${IPA_PATH:-}\" || \"$IPA_PATH\" != /*.ipa ]]; then echo \"IPA_PATH must be set to an absolute .ipa path\" >&2; exit 1; fi; npx eas-cli submit --platform ios --profile coach-production --path \"$IPA_PATH\" --non-interactive --no-wait'",
     "web": "expo start --web",
-    "magic-link-bridge": "node scripts/magic-link-bridge.mjs"
+    "magic-link-bridge": "node scripts/magic-link-bridge.mjs",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.21.0",
@@ -37,5 +46,8 @@
     "react-native-safe-area-context": "4.8.2",
     "react-native-screens": "~3.29.0",
     "typescript": "^5.3.0"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.1"
   }
 }

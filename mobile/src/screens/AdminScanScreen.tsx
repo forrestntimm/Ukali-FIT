@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
 import { useAuth } from "../context/AuthContext";
+import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 import { formatDateTimeInAppTimeZone, toDayKeyInAppTimeZone } from "../utils/timezone";
 
@@ -24,7 +25,8 @@ type ClassItem = {
   datetime: string;
   status: "OPEN" | "CLOSED" | "CANCELED";
   capacity: number;
-  signups?: Array<{ checkedInAt?: string | null }>;
+  reservationCount?: number;
+  checkedInCount?: number;
 };
 
 type CheckInResponse = {
@@ -32,37 +34,134 @@ type CheckInResponse = {
   checkInAt: string;
   klass: { id: string; title: string; datetime: string };
   member: { id: string; name: string; email: string; checkInQrCode: string };
+  workoutLog: {
+    id: string;
+    checkedInAt: string;
+    weight?: string | null;
+    completionTime?: string | null;
+    movementScales?: string | null;
+    coachNotes?: string | null;
+    workout?: {
+      id: string;
+      date: string;
+      description: string;
+    } | null;
+  };
+};
+
+type PerformanceForm = {
+  weight: string;
+  completionTime: string;
+  movementScales: string;
+  coachNotes: string;
+};
+
+type ClassSignupItem = {
+  id: string;
+  createdAt: string;
+  checkedInAt?: string | null;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    paymentStatus?: "PAID" | "UNPAID";
+    checkInQrCode?: string;
+  };
 };
 
 export default function AdminScanScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = Camera.useCameraPermissions();
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const initialCached = peekScreenCache<{
+    classes: ClassItem[];
+    selectedClassId: string;
+    classRoster: ClassSignupItem[];
+  }>("admin-scan");
+  const [classes, setClasses] = useState<ClassItem[]>(initialCached?.classes || []);
+  const [selectedClassId, setSelectedClassId] = useState<string>(initialCached?.selectedClassId || "");
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [manualQrCode, setManualQrCode] = useState("");
+  const [classRoster, setClassRoster] = useState<ClassSignupItem[]>(initialCached?.classRoster || []);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [selectedRosterUserId, setSelectedRosterUserId] = useState("");
+  const [rosterDropdownOpen, setRosterDropdownOpen] = useState(false);
+  const [lastCheckedInQrCode, setLastCheckedInQrCode] = useState("");
+  const [lastCheckedInMemberName, setLastCheckedInMemberName] = useState("");
+  const [performance, setPerformance] = useState<PerformanceForm>({
+    weight: "",
+    completionTime: "",
+    movementScales: "",
+    coachNotes: ""
+  });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const cached = await readScreenCache<{
+        classes: ClassItem[];
+        selectedClassId: string;
+        classRoster: ClassSignupItem[];
+      }>("admin-scan");
+      if (!cached) return;
+      setClasses(cached.classes || []);
+      setSelectedClassId(cached.selectedClassId || "");
+      setClassRoster(cached.classRoster || []);
+    })();
+  }, []);
+
+  const loadClassRoster = useCallback(async (classId: string) => {
+    if (!classId) {
+      setClassRoster([]);
+      setSelectedRosterUserId("");
+      return;
+    }
+    setLoadingRoster(true);
+    try {
+      const res = await api.get(`/classes/${classId}/signups`);
+      const roster = res.data as ClassSignupItem[];
+      setClassRoster(roster);
+      await writeScreenCache("admin-scan", {
+        classes,
+        selectedClassId: classId,
+        classRoster: roster
+      });
+      if (selectedRosterUserId && !roster.some((signup) => signup.user?.id === selectedRosterUserId)) {
+        setSelectedRosterUserId("");
+      }
+    } catch {
+      setClassRoster([]);
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [selectedRosterUserId]);
 
   const loadClasses = useCallback(async () => {
     setLoadingClasses(true);
     try {
-      const res = await api.get("/classes");
+      const res = await api.get("/classes", { params: { mine: "true", summary: "true", limit: "20" } });
       const all = (res.data as ClassItem[]).filter((item) => item.status !== "CANCELED");
       const todayKey = toDayKeyInAppTimeZone(new Date());
       const todayClasses = all.filter((item) => toDayKeyInAppTimeZone(item.datetime) === todayKey);
       const options = todayClasses.length > 0 ? todayClasses : all.slice(0, 12);
       setClasses(options);
-      if (!options.find((item) => item.id === selectedClassId)) {
-        setSelectedClassId(options[0]?.id || "");
-      }
+      const nextSelectedClassId = options.find((item) => item.id === selectedClassId)
+        ? selectedClassId
+        : options[0]?.id || "";
+      setSelectedClassId(nextSelectedClassId);
+      await loadClassRoster(nextSelectedClassId);
+      await writeScreenCache("admin-scan", {
+        classes: options,
+        selectedClassId: nextSelectedClassId,
+        classRoster
+      });
     } finally {
       setLoadingClasses(false);
     }
-  }, [selectedClassId]);
+  }, [loadClassRoster, selectedClassId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -70,48 +169,101 @@ export default function AdminScanScreen() {
     }, [loadClasses])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedClassId) return;
+      void loadClassRoster(selectedClassId);
+      const interval = setInterval(() => {
+        void loadClassRoster(selectedClassId);
+      }, 15000);
+      return () => clearInterval(interval);
+    }, [loadClassRoster, selectedClassId])
+  );
+
   const selectedClass = useMemo(
     () => classes.find((item) => item.id === selectedClassId) || null,
     [classes, selectedClassId]
   );
+  const selectedRosterSignup = useMemo(
+    () => classRoster.find((signup) => signup.user?.id === selectedRosterUserId) || null,
+    [classRoster, selectedRosterUserId]
+  );
 
   const submitCheckIn = useCallback(
-    async (rawCode: string) => {
+    async (rawCode: string, options?: { savePerformance?: boolean }) => {
       const qrCode = rawCode.trim();
       if (!qrCode || !selectedClassId || submitting) return;
 
       setSubmitting(true);
       setStatusError(null);
       try {
-        const res = await api.post<CheckInResponse>(`/classes/${selectedClassId}/checkin`, { qrCode });
-        const payload = res.data;
-        const message = `${payload.member.name} • ${formatDateTimeInAppTimeZone(payload.checkInAt)}`;
+        const requestPayload: {
+          qrCode: string;
+          weight?: string;
+          completionTime?: string;
+          movementScales?: string;
+          coachNotes?: string;
+        } = { qrCode };
+
+        if (options?.savePerformance) {
+          const weight = performance.weight.trim();
+          const completionTime = performance.completionTime.trim();
+          const movementScales = performance.movementScales.trim();
+          const coachNotes = performance.coachNotes.trim();
+          if (weight) requestPayload.weight = weight;
+          if (completionTime) requestPayload.completionTime = completionTime;
+          if (movementScales) requestPayload.movementScales = movementScales;
+          if (coachNotes) requestPayload.coachNotes = coachNotes;
+        }
+
+        const res = await api.post<CheckInResponse>(`/classes/${selectedClassId}/checkin`, requestPayload);
+        const response = res.data;
+        const message = `${response.member.name} • ${formatDateTimeInAppTimeZone(response.checkInAt)}`;
+        setLastCheckedInQrCode(qrCode);
+        setLastCheckedInMemberName(response.member.name);
+        setSelectedRosterUserId(response.member.id);
+        setPerformance({
+          weight: response.workoutLog.weight || "",
+          completionTime: response.workoutLog.completionTime || "",
+          movementScales: response.workoutLog.movementScales || "",
+          coachNotes: response.workoutLog.coachNotes || ""
+        });
+
         setStatusMessage(
-          payload.status === "ALREADY_CHECKED_IN"
+          options?.savePerformance
+            ? `Workout data saved for ${response.member.name}.`
+            : response.status === "ALREADY_CHECKED_IN"
             ? `Already checked in: ${message}`
             : `Checked in: ${message}`
         );
         setManualQrCode("");
-        Alert.alert(
-          payload.status === "ALREADY_CHECKED_IN" ? "Already Checked In" : "Check-in Confirmed",
-          message
-        );
+        if (!options?.savePerformance) {
+          Alert.alert(
+            response.status === "ALREADY_CHECKED_IN" ? "Already Checked In" : "Check-in Confirmed",
+            message
+          );
+        }
         await loadClasses();
+        await loadClassRoster(selectedClassId);
       } catch (err: any) {
-        const message = err?.response?.data?.message || "Unable to check in this QR code.";
+        const message = err?.response?.data?.message || "Unable to save check-in.";
         setStatusError(message);
-        Alert.alert("Check-in Failed", message);
+        if (!options?.savePerformance) {
+          Alert.alert("Check-in Failed", message);
+        }
       } finally {
         setSubmitting(false);
         setScanLocked(true);
         setTimeout(() => setScanLocked(false), 1500);
       }
     },
-    [loadClasses, selectedClassId, submitting]
+    [loadClassRoster, loadClasses, performance.coachNotes, performance.completionTime, performance.movementScales, performance.weight, selectedClassId, submitting]
   );
 
-  const checkedInCount = selectedClass?.signups?.filter((item) => item.checkedInAt).length || 0;
-  const reservedCount = selectedClass?.signups?.length || 0;
+  const checkedInCount = classRoster.filter((item) => item.checkedInAt).length;
+  const reservedCount = classRoster.length || selectedClass?.reservationCount || 0;
+  const selectedAthleteQrCode = selectedRosterSignup?.user?.checkInQrCode || lastCheckedInQrCode;
+  const selectedAthleteName = selectedRosterSignup?.user?.name || lastCheckedInMemberName;
 
   if (user?.role !== "ADMIN") {
     return (
@@ -132,6 +284,15 @@ export default function AdminScanScreen() {
         <Text style={styles.title}>Admin Scanner</Text>
         <Text style={styles.subtitle}>Select class, then scan member QR to check in.</Text>
 
+        {classes.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>No Assigned Classes</Text>
+            <Text style={styles.subText}>
+              You have no classes assigned. Ask an approved admin to assign your class schedule.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Class Session</Text>
           {loadingClasses ? <ActivityIndicator color={theme.colors.textPrimary} /> : null}
@@ -142,7 +303,11 @@ export default function AdminScanScreen() {
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.classChip, active && styles.classChipActive]}
-                  onPress={() => setSelectedClassId(item.id)}
+                  onPress={() => {
+                    setSelectedClassId(item.id);
+                    setRosterDropdownOpen(false);
+                    void loadClassRoster(item.id);
+                  }}
                 >
                   <Text style={[styles.classChipTitle, active && styles.classChipTitleActive]}>{item.title}</Text>
                   <Text style={[styles.classChipSub, active && styles.classChipTitleActive]}>
@@ -208,6 +373,87 @@ export default function AdminScanScreen() {
           {statusMessage ? <Text style={styles.successText}>{statusMessage}</Text> : null}
           {statusError ? <Text style={styles.errorText}>{statusError}</Text> : null}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Workout Data (After Check-In)</Text>
+          <TouchableOpacity
+            style={styles.dropdownButton}
+            onPress={() => setRosterDropdownOpen((prev) => !prev)}
+            disabled={loadingRoster || !selectedClassId}
+          >
+            <Text style={styles.dropdownButtonText}>
+              {loadingRoster
+                ? "Loading athletes..."
+                : selectedRosterSignup?.user?.name
+                ? `Athlete: ${selectedRosterSignup.user.name}`
+                : "Select reserved athlete"}
+            </Text>
+          </TouchableOpacity>
+          {rosterDropdownOpen ? (
+            <View style={styles.dropdownList}>
+              {classRoster.length === 0 ? <Text style={styles.subText}>No reserved athletes yet.</Text> : null}
+              {classRoster.map((signup) => (
+                <TouchableOpacity
+                  key={signup.id}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    const qr = signup.user?.checkInQrCode || "";
+                    setSelectedRosterUserId(signup.user?.id || "");
+                    setLastCheckedInQrCode(qr);
+                    setLastCheckedInMemberName(signup.user?.name || "");
+                    setRosterDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.dropdownItemTitle}>{signup.user?.name || "Unknown"}</Text>
+                  <Text style={styles.dropdownItemSub}>
+                    {signup.user?.paymentStatus || "UNPAID"} • {signup.checkedInAt ? "Checked in" : "Not checked in"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+          <Text style={styles.subText}>
+            {selectedAthleteQrCode
+              ? `Saving results for ${selectedAthleteName || "selected athlete"}.`
+              : "Scan, select an athlete, or manually check in first."}
+          </Text>
+          <TextInput
+            value={performance.weight}
+            onChangeText={(value) => setPerformance((prev) => ({ ...prev, weight: value }))}
+            placeholder="Weight (example: 85kg)"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={styles.input}
+          />
+          <TextInput
+            value={performance.completionTime}
+            onChangeText={(value) => setPerformance((prev) => ({ ...prev, completionTime: value }))}
+            placeholder="Time (example: 12:34)"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={styles.input}
+          />
+          <TextInput
+            value={performance.movementScales}
+            onChangeText={(value) => setPerformance((prev) => ({ ...prev, movementScales: value }))}
+            placeholder="Movement scales"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={styles.input}
+          />
+          <TextInput
+            value={performance.coachNotes}
+            onChangeText={(value) => setPerformance((prev) => ({ ...prev, coachNotes: value }))}
+            placeholder="Coach notes"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={[styles.input, styles.multiLineInput]}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.button, (!selectedAthleteQrCode || submitting) && styles.buttonDisabled]}
+            onPress={() => void submitCheckIn(selectedAthleteQrCode, { savePerformance: true })}
+            disabled={!selectedAthleteQrCode || submitting}
+          >
+            <Text style={styles.buttonText}>{submitting ? "Saving..." : "Save Workout Data"}</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
@@ -237,7 +483,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   card: {
-    backgroundColor: theme.colors.surfaceTranslucent,
+    backgroundColor: theme.colors.adminSurfaceTranslucent,
     borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: theme.radius.lg,
@@ -256,14 +502,14 @@ const styles = StyleSheet.create({
   classChip: {
     width: 220,
     marginRight: 8,
-    backgroundColor: theme.colors.surfaceTranslucent,
+    backgroundColor: theme.colors.adminSurfaceTranslucent,
     borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: 10,
     padding: 10
   },
   classChipActive: {
-    backgroundColor: theme.colors.accentMutedTranslucent,
+    backgroundColor: theme.colors.adminAccentMutedTranslucent,
     borderColor: theme.colors.accent
   },
   classChipTitle: {
@@ -301,8 +547,47 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     marginBottom: 10
   },
+  multiLineInput: {
+    minHeight: 84,
+    textAlignVertical: "top"
+  },
+  dropdownButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10
+  },
+  dropdownButtonText: {
+    color: theme.colors.textPrimary,
+    fontWeight: "600"
+  },
+  dropdownList: {
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    backgroundColor: theme.colors.adminSurfaceTranslucent,
+    marginBottom: 10
+  },
+  dropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopColor: theme.colors.border,
+    borderTopWidth: 1
+  },
+  dropdownItemTitle: {
+    color: theme.colors.textPrimary,
+    fontWeight: "600"
+  },
+  dropdownItemSub: {
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+    fontSize: 12
+  },
   button: {
-    backgroundColor: theme.colors.accentMutedTranslucent,
+    backgroundColor: theme.colors.adminAccentMutedTranslucent,
     borderColor: theme.colors.accent,
     borderWidth: 1,
     borderRadius: 10,

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getCachedAuthToken } from "../lib/authTokenCache";
 
 const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
 const isLocalBrowser =
@@ -12,7 +13,17 @@ export const IS_USING_API_FALLBACK = !configuredApiUrl;
 export const api = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("auth_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+  return (async () => {
+    const token = await getCachedAuthToken();
+
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    config.headers = config.headers || {};
+    config.headers["x-ukali-client"] = "admin-web";
+
+    return config;
+  })();
 });

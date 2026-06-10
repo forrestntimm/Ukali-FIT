@@ -25,8 +25,3 @@ export const supabase = createClient(
 
 export const ADMIN_CALLBACK_URL =
   import.meta.env.VITE_ADMIN_CALLBACK_URL || `${window.location.origin}/auth/callback`;
-
-export const BREAK_GLASS_ADMIN_EMAILS = (import.meta.env.VITE_BREAK_GLASS_ADMIN_EMAILS || "")
-  .split(",")
-  .map((email: string) => email.trim().toLowerCase())
-  .filter(Boolean);

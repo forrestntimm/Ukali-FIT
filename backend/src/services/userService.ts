@@ -1,6 +1,53 @@
 import bcrypt from "bcryptjs";
-import { PaymentMethod, PaymentStatus, Role } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, Prisma, Role } from "@prisma/client";
 import { prisma } from "../utils/prisma";
+
+const userMetricsSelect = {
+  id: true,
+  name: true,
+  profileImageDataUrl: true,
+  age: true,
+  fitnessGoals: true,
+  personalRecords: true,
+  email: true,
+  phone: true,
+  checkInQrCode: true,
+  role: true,
+  membershipStart: true,
+  nextPaymentDue: true,
+  paymentStatus: true,
+  paymentMethod: true,
+  inviteSentAt: true,
+  inviteAcceptedAt: true,
+  lastLoginAt: true,
+  webAccessApproved: true,
+  webAccessApprovedAt: true,
+  webAccessApprovedById: true,
+  webAccessApprovedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true
+    }
+  },
+  createdAt: true,
+  classSignups: {
+    select: {
+      checkedInAt: true,
+      class: {
+        select: {
+          datetime: true,
+          status: true
+        }
+      }
+    }
+  }
+} as const;
+
+const realAthleteProfileWhere: Prisma.UserWhereInput = {
+  role: Role.MEMBER,
+  OR: [{ inviteAcceptedAt: { not: null } }, { lastLoginAt: { not: null } }]
+};
 
 export async function createUser(input: {
   name: string;
@@ -32,36 +79,7 @@ export async function createUser(input: {
       paymentStatus: input.paymentStatus || PaymentStatus.UNPAID,
       paymentMethod: input.paymentMethod
     },
-    select: {
-      id: true,
-      name: true,
-      profileImageDataUrl: true,
-      age: true,
-      fitnessGoals: true,
-      email: true,
-      phone: true,
-      checkInQrCode: true,
-      role: true,
-      membershipStart: true,
-      nextPaymentDue: true,
-      paymentStatus: true,
-      paymentMethod: true,
-      inviteSentAt: true,
-      inviteAcceptedAt: true,
-      lastLoginAt: true,
-      createdAt: true,
-      classSignups: {
-        select: {
-          checkedInAt: true,
-          class: {
-            select: {
-              datetime: true,
-              status: true
-            }
-          }
-        }
-      }
-    }
+    select: userMetricsSelect
   });
   return withMembershipStatusAndProfileMetrics(user);
 }
@@ -69,39 +87,55 @@ export async function createUser(input: {
 export async function listUsers() {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      profileImageDataUrl: true,
-      age: true,
-      fitnessGoals: true,
-      email: true,
-      phone: true,
-      checkInQrCode: true,
-      role: true,
-      membershipStart: true,
-      nextPaymentDue: true,
-      paymentStatus: true,
-      paymentMethod: true,
-      inviteSentAt: true,
-      inviteAcceptedAt: true,
-      lastLoginAt: true,
-      createdAt: true,
-      classSignups: {
-        select: {
-          checkedInAt: true,
-          class: {
-            select: {
-              datetime: true,
-              status: true
-            }
-          }
-        }
-      }
-    }
+    select: userMetricsSelect
   });
 
   return users.map(withMembershipStatusAndProfileMetrics);
+}
+
+export async function listCoachUsers() {
+  return prisma.user.findMany({
+    where: { role: Role.ADMIN },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true
+    }
+  });
+}
+
+export async function listMemberOptions() {
+  return prisma.user.findMany({
+    where: realAthleteProfileWhere,
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      paymentStatus: true,
+      inviteAcceptedAt: true,
+      lastLoginAt: true
+    }
+  });
+}
+
+export async function getMemberDashboardStats() {
+  const [members, overdue] = await Promise.all([
+    prisma.user.count({
+      where: realAthleteProfileWhere
+    }),
+    prisma.user.count({
+      where: {
+        ...realAthleteProfileWhere,
+        paymentStatus: PaymentStatus.UNPAID
+      }
+    })
+  ]);
+
+  return { members, overdue, upcoming: 0 };
 }
 
 export async function updateUser(id: string, data: {
@@ -109,6 +143,7 @@ export async function updateUser(id: string, data: {
   profileImageDataUrl?: string | null;
   age?: number | null;
   fitnessGoals?: string | null;
+  personalRecords?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   email?: string;
   phone?: string;
   membershipStart?: Date | null;
@@ -116,43 +151,24 @@ export async function updateUser(id: string, data: {
   paymentStatus?: PaymentStatus;
   paymentMethod?: PaymentMethod | null;
 }) {
-  const normalized = {
-    ...data,
-    email: data.email ? data.email.toLowerCase() : undefined
-  };
+  const normalized: Prisma.UserUpdateInput = {};
+
+  if (data.name !== undefined) normalized.name = data.name;
+  if (data.profileImageDataUrl !== undefined) normalized.profileImageDataUrl = data.profileImageDataUrl;
+  if (data.age !== undefined) normalized.age = data.age;
+  if (data.fitnessGoals !== undefined) normalized.fitnessGoals = data.fitnessGoals;
+  if (data.personalRecords !== undefined) normalized.personalRecords = data.personalRecords;
+  if (data.email !== undefined) normalized.email = data.email.toLowerCase();
+  if (data.phone !== undefined) normalized.phone = data.phone;
+  if (data.membershipStart !== undefined) normalized.membershipStart = data.membershipStart;
+  if (data.nextPaymentDue !== undefined) normalized.nextPaymentDue = data.nextPaymentDue;
+  if (data.paymentStatus !== undefined) normalized.paymentStatus = data.paymentStatus;
+  if (data.paymentMethod !== undefined) normalized.paymentMethod = data.paymentMethod;
+
   const user = await prisma.user.update({
     where: { id },
     data: normalized,
-    select: {
-      id: true,
-      name: true,
-      profileImageDataUrl: true,
-      age: true,
-      fitnessGoals: true,
-      email: true,
-      phone: true,
-      checkInQrCode: true,
-      role: true,
-      membershipStart: true,
-      nextPaymentDue: true,
-      paymentStatus: true,
-      paymentMethod: true,
-      inviteSentAt: true,
-      inviteAcceptedAt: true,
-      lastLoginAt: true,
-      createdAt: true,
-      classSignups: {
-        select: {
-          checkedInAt: true,
-          class: {
-            select: {
-              datetime: true,
-              status: true
-            }
-          }
-        }
-      }
-    }
+    select: userMetricsSelect
   });
   return withMembershipStatusAndProfileMetrics(user);
 }
@@ -164,36 +180,7 @@ export async function deleteUser(id: string) {
 export async function getUserById(id: string) {
   const user = await prisma.user.findUnique({
     where: { id },
-    select: {
-      id: true,
-      name: true,
-      profileImageDataUrl: true,
-      age: true,
-      fitnessGoals: true,
-      email: true,
-      phone: true,
-      checkInQrCode: true,
-      role: true,
-      membershipStart: true,
-      nextPaymentDue: true,
-      paymentStatus: true,
-      paymentMethod: true,
-      inviteSentAt: true,
-      inviteAcceptedAt: true,
-      lastLoginAt: true,
-      createdAt: true,
-      classSignups: {
-        select: {
-          checkedInAt: true,
-          class: {
-            select: {
-              datetime: true,
-              status: true
-            }
-          }
-        }
-      }
-    }
+    select: userMetricsSelect
   });
   return user ? withMembershipStatusAndProfileMetrics(user) : null;
 }
@@ -219,7 +206,7 @@ export function withMembershipStatus(user: {
   return { ...user, membershipStatus: active ? "ACTIVE" : "EXPIRED" };
 }
 
-type SignupWithClass = {
+export type SignupWithClass = {
   checkedInAt: Date | null;
   class: {
     datetime: Date;
@@ -245,10 +232,11 @@ function previousGymDay(date: Date) {
   return cursor;
 }
 
-function calculateCurrentWorkoutStreak(signups: SignupWithClass[]) {
+export function calculateCurrentWorkoutStreak(signups: SignupWithClass[]) {
   const eligibleDates = signups
     .filter(
       (signup) =>
+        signup.checkedInAt !== null &&
         signup.class.status !== "CANCELED" &&
         signup.class.datetime <= new Date() &&
         isGymWeekday(signup.class.datetime)
@@ -273,7 +261,7 @@ function calculateDaysLeftInMembership(nextPaymentDue: Date | null, paymentStatu
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
-function withMembershipStatusAndProfileMetrics(user: {
+export function withMembershipStatusAndProfileMetrics(user: {
   classSignups: SignupWithClass[];
   nextPaymentDue: Date | null;
   paymentStatus: PaymentStatus;
@@ -299,7 +287,8 @@ export async function getUserForAuthByEmail(email: string) {
       id: true,
       email: true,
       role: true,
-      supabaseUserId: true
+      supabaseUserId: true,
+      webAccessApproved: true
     }
   });
 }
@@ -311,7 +300,8 @@ export async function getUserForAuthBySupabaseId(supabaseUserId: string) {
       id: true,
       email: true,
       role: true,
-      supabaseUserId: true
+      supabaseUserId: true,
+      webAccessApproved: true
     }
   });
 }
@@ -338,6 +328,59 @@ export async function markAuthSuccess(userId: string) {
     data: {
       inviteAcceptedAt: new Date(),
       lastLoginAt: new Date()
+    }
+  });
+}
+
+export async function listWorkoutLogsByUser(userId: string) {
+  return prisma.workoutLog.findMany({
+    where: { userId },
+    orderBy: { checkedInAt: "desc" },
+    select: {
+      id: true,
+      checkedInAt: true,
+      weight: true,
+      completionTime: true,
+      movementScales: true,
+      coachNotes: true,
+      class: {
+        select: {
+          id: true,
+          title: true,
+          datetime: true
+        }
+      },
+      workout: {
+        select: {
+          id: true,
+          date: true,
+          description: true
+        }
+      }
+    }
+  });
+}
+
+export async function countClassesCoachedByUser(userId: string) {
+  return prisma.coachClassSession.count({
+    where: { coachId: userId }
+  });
+}
+
+export async function approveUserWebAccess(targetUserId: string, approverUserId: string) {
+  return prisma.user.update({
+    where: { id: targetUserId },
+    data: {
+      webAccessApproved: true,
+      webAccessApprovedAt: new Date(),
+      webAccessApprovedById: approverUserId
+    },
+    select: {
+      id: true,
+      email: true,
+      webAccessApproved: true,
+      webAccessApprovedAt: true,
+      webAccessApprovedById: true
     }
   });
 }

@@ -7,6 +7,8 @@ import classes from "./classes";
 import announcements from "./announcements";
 import devices from "./devices";
 import webhooks from "./webhooks";
+import scheduling from "./scheduling";
+import cron from "./cron";
 
 const router = Router();
 
@@ -15,8 +17,10 @@ router.use("/users", users);
 router.use("/payments", payments);
 router.use("/workouts", workouts);
 router.use("/classes", classes);
+router.use("/scheduling", scheduling);
 router.use("/announcements", announcements);
 router.use("/devices", devices);
 router.use("/webhooks", webhooks);
+router.use("/cron", cron);
 
 export default router;

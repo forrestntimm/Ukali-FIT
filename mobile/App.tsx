@@ -1,103 +1,148 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createStackNavigator } from "@react-navigation/stack";
-import { Ionicons } from "@expo/vector-icons";
-import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import LoginScreen from "./src/screens/LoginScreen";
-import DashboardScreen from "./src/screens/DashboardScreen";
-import ClassesScreen from "./src/screens/ClassesScreen";
-import CommunityScreen from "./src/screens/CommunityScreen";
-import ProfileScreen from "./src/screens/ProfileScreen";
-import CoachAccessScreen from "./src/screens/CoachAccessScreen";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as Notifications from "expo-notifications";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider } from "./src/context/AuthContext";
+import AppErrorBoundary from "./src/components/AppErrorBoundary";
+import AppLoadingScreen from "./src/components/AppLoadingScreen";
+import AthleteRoot from "./src/app/AthleteRoot";
+import CoachRoot from "./src/app/CoachRoot";
 import { theme } from "./src/theme";
-import { IS_COACH_APP } from "./src/config/appVariant";
+import { IS_COACH_APP, VARIANT_CONFIG_ERROR } from "./src/config/appVariant";
+import { RUNTIME_CONFIG_ERROR } from "./src/config/runtimeConfig";
+import { clearLatestFatalError, getLatestFatalError, installGlobalErrorHandler, subscribeToFatalError } from "./src/lib/appCrashHandler";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false
-  })
-});
-
-const Tabs = createBottomTabNavigator();
-const Stack = createStackNavigator();
-const CoachCheckInScreen = IS_COACH_APP ? require("./src/screens/AdminScanScreen").default : null;
-
-function AppTabs() {
-  return (
-    <Tabs.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.textPrimary,
-        tabBarInactiveTintColor: theme.colors.textSecondary,
-        tabBarStyle: {
-          backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.border,
-          borderTopWidth: 1,
-          height: 74,
-          paddingTop: 8,
-          paddingBottom: 10
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600"
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconName =
-            route.name === "Dashboard"
-              ? "grid-outline"
-              : route.name === "Classes"
-                ? "calendar-outline"
-                : route.name === "Announcements"
-                  ? "chatbubble-ellipses-outline"
-                  : route.name === "Check-In"
-                    ? "qr-code-outline"
-                    : "person-circle-outline";
-          return <Ionicons name={iconName} size={size + 2} color={color} />;
-        }
-      })}
-    >
-      <Tabs.Screen name="Dashboard" component={DashboardScreen} />
-      <Tabs.Screen name="Classes" component={ClassesScreen} />
-      <Tabs.Screen name="Announcements" component={CommunityScreen} />
-      {IS_COACH_APP && CoachCheckInScreen ? <Tabs.Screen name="Check-In" component={CoachCheckInScreen} /> : null}
-      <Tabs.Screen name="Profile" component={ProfileScreen} />
-    </Tabs.Navigator>
-  );
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true
+    })
+  });
+} catch (error) {
+  if (__DEV__) {
+    console.warn("[notifications] Failed to set notification handler during app startup.", error);
+  }
 }
 
-function RootNavigator() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+installGlobalErrorHandler();
 
+function AppStatusScreen({
+  title,
+  message,
+  errorDetail,
+  onRetry
+}: {
+  title: string;
+  message: string;
+  errorDetail?: string | null;
+  onRetry?: () => void;
+}) {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (IS_COACH_APP && user.role !== "ADMIN" ? <Stack.Screen name="CoachOnly" component={CoachAccessScreen} /> : <Stack.Screen name="Main" component={AppTabs} />) : <Stack.Screen name="Login" component={LoginScreen} />}
-    </Stack.Navigator>
+    <View style={styles.variantGuard}>
+      <AppLoadingScreen title={title} subtitle={message} />
+      {errorDetail ? <Text selectable style={styles.errorDetail}>{errorDetail}</Text> : null}
+      {onRetry ? (
+        <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
 export default function App() {
+  const [fatalError, setFatalError] = useState<Error | null>(() => getLatestFatalError());
+  const [recoveryKey, setRecoveryKey] = useState(0);
+
+  useEffect(() => subscribeToFatalError(setFatalError), []);
+  useEffect(() => {
+    void Notifications.setBadgeCountAsync(0).catch((error) => {
+      if (__DEV__) {
+        console.warn("[notifications] Failed to clear app badge on open.", error);
+      }
+    });
+  }, []);
+
+  const handleRetry = () => {
+    clearLatestFatalError();
+    setFatalError(null);
+    setRecoveryKey((current) => current + 1);
+  };
+
+  if (VARIANT_CONFIG_ERROR || RUNTIME_CONFIG_ERROR) {
+    return (
+      <AppStatusScreen
+        title={VARIANT_CONFIG_ERROR ? "App Variant Not Configured" : "App Configuration Missing"}
+        message={VARIANT_CONFIG_ERROR || RUNTIME_CONFIG_ERROR || "Unknown configuration error"}
+      />
+    );
+  }
+
+  if (fatalError) {
+    return (
+      <AppStatusScreen
+        title="App Error"
+        message="The app hit an unexpected problem while loading. Please close and reopen it."
+        errorDetail={fatalError.message}
+        onRetry={handleRetry}
+      />
+    );
+  }
+
   return (
-    <AuthProvider>
-      <NavigationContainer
-        theme={{
-          dark: true,
-          colors: {
-            primary: theme.colors.accent,
-            background: theme.colors.background,
-            card: theme.colors.surface,
-            text: theme.colors.textPrimary,
-            border: theme.colors.border,
-            notification: theme.colors.danger
-          }
-        }}
-      >
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <AppErrorBoundary key={recoveryKey} onRetry={handleRetry}>
+      <AuthProvider>
+        <SafeAreaProvider>
+          <NavigationContainer
+            theme={{
+              dark: true,
+              colors: {
+                primary: theme.colors.accent,
+                background: theme.colors.background,
+                card: theme.colors.surface,
+                text: theme.colors.textPrimary,
+                border: theme.colors.border,
+                notification: theme.colors.danger
+              }
+            }}
+          >
+            {IS_COACH_APP ? <CoachRoot /> : <AthleteRoot />}
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
+
+const styles = StyleSheet.create({
+  variantGuard: {
+    flex: 1,
+    backgroundColor: theme.colors.background
+  },
+  errorDetail: {
+    color: theme.colors.danger,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 16,
+    paddingHorizontal: 24,
+    textAlign: "center"
+  },
+  retryButton: {
+    marginTop: 20,
+    alignSelf: "center",
+    backgroundColor: theme.colors.accentMuted,
+    borderColor: theme.colors.accent,
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  retryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "600"
+  }
+});

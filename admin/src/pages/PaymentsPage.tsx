@@ -59,14 +59,6 @@ export default function PaymentsPage() {
     () => plans.find((plan) => plan.code === form.planCode) || null,
     [plans, form.planCode]
   );
-  const membershipPlans = useMemo(
-    () => plans.filter((plan) => plan.category === "membership"),
-    [plans]
-  );
-  const perClassPlans = useMemo(
-    () => plans.filter((plan) => plan.category === "per-class"),
-    [plans]
-  );
   const normalizedQuantity = selectedPlan?.quantityEnabled ? Math.max(1, Number(form.quantity) || 1) : 1;
   const previewAmount = selectedPlan ? selectedPlan.amount * normalizedQuantity : 0;
 
@@ -253,49 +245,17 @@ export default function PaymentsPage() {
             ))}
           </select>
 
-          <div className="payment-plan-groups">
-            <div className="payment-plan-group">
-              <p className="payment-plan-group-title">Memberships</p>
-              <div className="payment-plan-options">
-                {membershipPlans.map((plan) => {
-                  const isSelected = form.planCode === plan.code;
-                  return (
-                    <button
-                      key={plan.code}
-                      type="button"
-                      className={`payment-plan-option${isSelected ? " active" : ""}`}
-                      onClick={() => setForm((current) => ({ ...current, planCode: plan.code, quantity: "1" }))}
-                    >
-                      <span className="payment-plan-option-name">{plan.name}</span>
-                      <span className="payment-plan-option-price">{plan.amount} {plan.currency}</span>
-                      <span className="payment-plan-option-description">{plan.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="payment-plan-group">
-              <p className="payment-plan-group-title">Per Class</p>
-              <div className="payment-plan-options">
-                {perClassPlans.map((plan) => {
-                  const isSelected = form.planCode === plan.code;
-                  return (
-                    <button
-                      key={plan.code}
-                      type="button"
-                      className={`payment-plan-option${isSelected ? " active" : ""}`}
-                      onClick={() => setForm((current) => ({ ...current, planCode: plan.code, quantity: "1" }))}
-                    >
-                      <span className="payment-plan-option-name">{plan.name}</span>
-                      <span className="payment-plan-option-price">{plan.amount} {plan.currency}</span>
-                      <span className="payment-plan-option-description">{plan.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          <select
+            value={form.planCode}
+            onChange={(e) => setForm((current) => ({ ...current, planCode: e.target.value, quantity: "1" }))}
+          >
+            <option value="">Select payment option</option>
+            {plans.map((plan) => (
+              <option key={plan.code} value={plan.code}>
+                {plan.name} - {plan.amount} {plan.currency}
+              </option>
+            ))}
+          </select>
 
           {selectedPlan ? (
             <p style={{ margin: 0, color: "#94a3b8" }}>

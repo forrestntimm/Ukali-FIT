@@ -17,11 +17,11 @@ test('admin payments page loads plan presets instead of relying on freeform amou
   assert.match(source, /Selected plan|Payment option|Select payment option/, 'admin payments page should render a payment option chooser');
 });
 
-test('admin payments page renders payment plans as visible grouped options instead of a plain plan dropdown', () => {
+test('admin payments page renders payment plans in a dropdown menu', () => {
   const source = fs.readFileSync(paymentsPagePath, 'utf8');
 
-  assert.match(source, /membershipPlans/, 'admin payments page should split membership plans into a visible group');
-  assert.match(source, /perClassPlans/, 'admin payments page should split per-class plans into a visible group');
-  assert.match(source, /payment-plan-option/, 'admin payments page should render clickable payment plan option cards');
-  assert.doesNotMatch(source, /<select value=\{form\.planCode\}/, 'admin payments page should not use a plain select for payment plans');
+  assert.match(source, /<select[\s\S]*value=\{form\.planCode\}/, 'admin payments page should use a plan dropdown');
+  assert.match(source, /Select payment option/, 'plan dropdown should have a clear placeholder');
+  assert.match(source, /plan\.name} - \{plan\.amount} \{plan\.currency}/, 'dropdown options should show name and price');
+  assert.doesNotMatch(source, /payment-plan-option/, 'admin payments page should not render large plan option cards');
 });

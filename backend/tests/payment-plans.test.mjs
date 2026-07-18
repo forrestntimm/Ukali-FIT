@@ -26,6 +26,8 @@ test('backend defines gym payment plan presets including per-class kids pricing'
   assert.match(source, /quantityEnabled:\s*true/, 'kids class should allow quantity selection');
   assert.match(source, /DROP_IN/, 'payment plans should include drop in pricing');
   assert.match(source, /YEAR_MEMBERSHIP/, 'payment plans should include year membership pricing');
+  assert.match(source, /GOLD_MEMBER/, 'payment plans should include Gold Member pricing');
+  assert.match(source, /name:\s*"Gold Member"[\s\S]*amount:\s*6000/, 'Gold Member should cost 6000 NPR');
 });
 
 test('manual payment route accepts a plan code and exposes payment plans to clients', () => {

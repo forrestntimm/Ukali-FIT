@@ -4,6 +4,7 @@ export type PaymentPlanCode =
   | "LADIES_CLASS_MONTHLY"
   | "ONE_WEEK_UNLIMITED"
   | "KIDS_CLASS"
+  | "GOLD_MEMBER"
   | "YEAR_MEMBERSHIP"
   | "STUDENT_DISCOUNT_MONTHLY"
   | "GURKHA_DISCOUNT_MONTHLY";
@@ -77,6 +78,17 @@ export const PAYMENT_PLANS: PaymentPlan[] = [
     durationCount: 1,
     quantityEnabled: true,
     category: "per-class"
+  },
+  {
+    code: "GOLD_MEMBER",
+    name: "Gold Member",
+    amount: 6000,
+    currency: "NPR",
+    description: "Premium monthly membership.",
+    durationUnit: "MONTH",
+    durationCount: 1,
+    quantityEnabled: false,
+    category: "membership"
   },
   {
     code: "YEAR_MEMBERSHIP",

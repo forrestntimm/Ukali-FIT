@@ -32,7 +32,11 @@ export function writePageCache<T>(key: string, data: T) {
   const envelope: PageCacheEnvelope<T> = { savedAt: Date.now(), data };
   memoryCache.set(key, envelope as PageCacheEnvelope<unknown>);
   if (!hasStorage()) return;
-  sessionStorage.setItem(key, JSON.stringify(envelope));
+  try {
+    sessionStorage.setItem(key, JSON.stringify(envelope));
+  } catch {
+    // Quota or serialization failures should degrade to memory-only caching.
+  }
 }
 
 export function clearPageCache(key: string) {

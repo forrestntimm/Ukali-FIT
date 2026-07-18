@@ -511,9 +511,9 @@ export async function signUpForClass(userId: string, classId: string) {
       id: true,
       status: true,
       capacity: true,
-      signups: {
+      _count: {
         select: {
-          id: true
+          signups: true
         }
       }
     }
@@ -530,7 +530,7 @@ export async function signUpForClass(userId: string, classId: string) {
     err.code = "CLASS_NOT_OPEN";
     throw err;
   }
-  if (klass.signups.length >= klass.capacity) {
+  if (klass._count.signups >= klass.capacity) {
     const err = new Error("Class is full") as Error & { status?: number; code?: string };
     err.status = 409;
     err.code = "CLASS_FULL";

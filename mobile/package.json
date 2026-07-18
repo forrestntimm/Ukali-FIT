@@ -22,6 +22,7 @@
     "eas:submit:ios:athlete": "bash -lc 'if [[ -z \"${IPA_PATH:-}\" || \"$IPA_PATH\" != /*.ipa ]]; then echo \"IPA_PATH must be set to an absolute .ipa path\" >&2; exit 1; fi; npx eas-cli submit --platform ios --profile athlete-production --path \"$IPA_PATH\" --non-interactive --no-wait'",
     "eas:submit:ios:coach": "bash -lc 'if [[ -z \"${IPA_PATH:-}\" || \"$IPA_PATH\" != /*.ipa ]]; then echo \"IPA_PATH must be set to an absolute .ipa path\" >&2; exit 1; fi; npx eas-cli submit --platform ios --profile coach-production --path \"$IPA_PATH\" --non-interactive --no-wait'",
     "web": "expo start --web",
+    "test": "node --test tests/*.test.mjs",
     "magic-link-bridge": "node scripts/magic-link-bridge.mjs",
     "postinstall": "patch-package"
   },

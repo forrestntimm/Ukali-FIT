@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyLegacyToken } from "../services/authService";
-import { extractBearerToken, resolveLocalUserFromSupabaseToken } from "../services/supabaseAuthService";
+import { extractBearerToken, resolveAuthUserFromSupabaseToken } from "../services/supabaseAuthService";
 
 export interface AuthRequest extends Request {
   user?: {
@@ -24,9 +24,9 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     return next();
   }
 
-  let resolved: Awaited<ReturnType<typeof resolveLocalUserFromSupabaseToken>>;
+  let resolved: Awaited<ReturnType<typeof resolveAuthUserFromSupabaseToken>>;
   try {
-    resolved = await resolveLocalUserFromSupabaseToken(token);
+    resolved = await resolveAuthUserFromSupabaseToken(token);
   } catch {
     return res.status(500).json({
       code: "AUTH_PROVIDER_MISCONFIGURED",

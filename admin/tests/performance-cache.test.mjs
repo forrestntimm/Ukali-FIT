@@ -1,54 +1,58 @@
+import path from "node:path";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const clientSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/api/client.ts",
+  path.join(packageRoot, "src/api/client.ts"),
   "utf8"
 );
 
 const appSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/App.tsx",
+  path.join(packageRoot, "src/App.tsx"),
   "utf8"
 );
 
 const pageCacheSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/lib/pageCache.ts",
+  path.join(packageRoot, "src/lib/pageCache.ts"),
   "utf8"
 );
 
 const adminWarmupsSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/lib/adminWarmups.ts",
+  path.join(packageRoot, "src/lib/adminWarmups.ts"),
   "utf8"
 );
 
 const dashboardSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/DashboardPage.tsx",
+  path.join(packageRoot, "src/pages/DashboardPage.tsx"),
   "utf8"
 );
 
 const membersSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/MembersPage.tsx",
+  path.join(packageRoot, "src/pages/MembersPage.tsx"),
   "utf8"
 );
 
 const paymentsSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/PaymentsPage.tsx",
+  path.join(packageRoot, "src/pages/PaymentsPage.tsx"),
   "utf8"
 );
 
 const schedulingSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/SchedulingPage.tsx",
+  path.join(packageRoot, "src/pages/SchedulingPage.tsx"),
   "utf8"
 );
 
 const wodSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/WodPage.tsx",
+  path.join(packageRoot, "src/pages/WodPage.tsx"),
   "utf8"
 );
 
 const announcementsSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/AnnouncementsPage.tsx",
+  path.join(packageRoot, "src/pages/AnnouncementsPage.tsx"),
   "utf8"
 );
 

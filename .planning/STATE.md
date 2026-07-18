@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 Phase: 4 of 4 (Notification And Android Expansion)
 Plan: 0 of 2 in current phase
 Status: Phase 3 complete; Phase 4 ready to plan
-Last activity: 2026-07-17 — Completed Phase 3 gym operations correctness across check-in, payment targeting, and scheduling assignment semantics
+Last activity: 2026-07-18 — Cross-channel data-flow optimization pass (lightweight cached auth resolution, image-free /users list payload, narrow notification device-token queries, batched class reminders, counted signup capacity checks, quota-safe admin page cache, repo-relative test paths with npm test scripts in all three packages), then integrated the Codex admin dashboard analytics commit (d932704) and added migration 0013 timestamp indexes backing the new /users/stats activity queries
 
 Progress: [█████████░] 90%
 
@@ -48,6 +48,8 @@ Recent decisions affecting current work:
 - 2026-03-30: Use variant-aware local iOS build paths for coach/admin artifacts, with explicit provisioning profile injection when automatic signing is unavailable locally
 - 2026-07-17: Treat primary and secondary coach assignments consistently for check-in authorization and coach-filtered class queries
 - 2026-07-17: Enforce activated-athlete targeting at the manual payment service boundary, not only in UI pickers
+- 2026-07-18: Keep auth middleware lightweight — full profile loads are opt-in for bootstrap callers, and token resolution is cached for 60s to avoid a Supabase round trip per request
+- 2026-07-18: Repo tests must resolve source paths relative to their own package so any checkout validates itself
 
 ### Pending Todos
 

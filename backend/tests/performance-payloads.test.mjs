@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const userRoutesPath = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/users.ts");
-const userServicePath = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/userService.ts");
-const classRoutesPath = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/classes.ts");
-const classServicePath = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/classService.ts");
-const workoutRoutesPath = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/workouts.ts");
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const userRoutesPath = path.resolve(path.join(packageRoot, "src/routes/users.ts"));
+const userServicePath = path.resolve(path.join(packageRoot, "src/services/userService.ts"));
+const classRoutesPath = path.resolve(path.join(packageRoot, "src/routes/classes.ts"));
+const classServicePath = path.resolve(path.join(packageRoot, "src/services/classService.ts"));
+const workoutRoutesPath = path.resolve(path.join(packageRoot, "src/routes/workouts.ts"));
 
 test("backend exposes lightweight member options and stats queries for admin surfaces", () => {
   const routeSource = fs.readFileSync(userRoutesPath, "utf8");
@@ -54,6 +57,75 @@ test("backend exposes lightweight member options and stats queries for admin sur
     /activityBuckets\.map/,
     "dashboard stats should return a chart-ready activity series"
   );
+});
+
+test("admin member list omits heavyweight base64 profile images", () => {
+  const serviceSource = fs.readFileSync(userServicePath, "utf8");
+  const listUsersSource = serviceSource.match(/export async function listUsers\([\s\S]*?\n}\n/)?.[0] ?? "";
+
+  assert.match(
+    serviceSource,
+    /const \{ profileImageDataUrl: _omitProfileImage, \.\.\.userListMetricsSelect \}/,
+    "user service should derive a list select that omits the base64 profile image"
+  );
+  assert.match(
+    listUsersSource,
+    /select:\s*userListMetricsSelect/,
+    "listUsers should use the image-free list select so /users stays lightweight"
+  );
+});
+
+test("auth middleware resolves identity without refetching the full profile per request", () => {
+  const authMiddlewareSource = fs.readFileSync(
+    path.join(packageRoot, "src", "middleware", "auth.ts"),
+    "utf8"
+  );
+  const supabaseAuthSource = fs.readFileSync(
+    path.join(packageRoot, "src", "services", "supabaseAuthService.ts"),
+    "utf8"
+  );
+
+  assert.match(
+    authMiddlewareSource,
+    /resolveAuthUserFromSupabaseToken/,
+    "requireAuth should use the lightweight cached auth resolver"
+  );
+  assert.match(
+    supabaseAuthSource,
+    /if \(!options\.includeProfile\) \{\s*return \{ user: undefined, authUser \};/s,
+    "full profile loads should be opt-in for bootstrap-style callers only"
+  );
+  assert.match(
+    supabaseAuthSource,
+    /AUTH_CACHE_TTL_MS/,
+    "supabase token resolution should be cached briefly to avoid a network round trip per request"
+  );
+});
+
+test("notification queries select device tokens narrowly instead of full user rows", () => {
+  const notificationSource = fs.readFileSync(
+    path.join(packageRoot, "src", "services", "notificationService.ts"),
+    "utf8"
+  );
+
+  assert.doesNotMatch(
+    notificationSource,
+    /include:\s*\{\s*deviceTokens:\s*true\s*\}/,
+    "notification queries should not drag full user rows (profile images) through pushes"
+  );
+  assert.match(
+    notificationSource,
+    /deviceTokens:\s*\{\s*select:\s*deviceTokenSelect\s*\}/,
+    "notification queries should select only device token fields"
+  );
+});
+
+test("class signup capacity check counts signups instead of loading them", () => {
+  const serviceSource = fs.readFileSync(classServicePath, "utf8");
+  const signupSource = serviceSource.match(/export async function signUpForClass\([\s\S]*?\n}\n/)?.[0] ?? "";
+
+  assert.match(signupSource, /_count:\s*\{\s*select:\s*\{\s*signups:\s*true/s, "signup should ask the database for a count");
+  assert.match(signupSource, /klass\._count\.signups >= klass\.capacity/, "capacity check should compare against the counted value");
 });
 
 test("coach summary route supports lightweight class loading for dashboard and scan flows", () => {

@@ -135,6 +135,7 @@ model ClassSignup {
 
   @@unique([userId, classId])
   @@index([classId])
+  @@index([checkedInAt])
 }
 
 model WorkoutLog {
@@ -155,6 +156,7 @@ model WorkoutLog {
 
   @@unique([userId, classId])
   @@index([userId, checkedInAt])
+  @@index([checkedInAt])
   @@index([classId])
   @@index([workoutId])
 }
@@ -170,6 +172,7 @@ model CoachClassSession {
   @@unique([coachId, classId])
   @@index([coachId])
   @@index([classId])
+  @@index([createdAt])
 }
 
 model Announcement {

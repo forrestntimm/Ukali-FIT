@@ -44,6 +44,10 @@ const userMetricsSelect = {
   }
 } as const;
 
+// Admin member lists never render profile photos; excluding the base64 image
+// keeps the /users payload from ballooning by ~750KB per member.
+const { profileImageDataUrl: _omitProfileImage, ...userListMetricsSelect } = userMetricsSelect;
+
 const realAthleteProfileWhere: Prisma.UserWhereInput = {
   role: Role.MEMBER,
   OR: [{ inviteAcceptedAt: { not: null } }, { lastLoginAt: { not: null } }]
@@ -87,7 +91,7 @@ export async function createUser(input: {
 export async function listUsers() {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
-    select: userMetricsSelect
+    select: userListMetricsSelect
   });
 
   return users.map(withMembershipStatusAndProfileMetrics);

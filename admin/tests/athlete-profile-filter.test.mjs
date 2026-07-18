@@ -1,6 +1,10 @@
+import path from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 import { hasRealAthleteProfile, filterRealAthleteProfiles } from "../src/utils/athleteProfiles.ts";
 
@@ -57,7 +61,7 @@ test("filterRealAthleteProfiles keeps only activated athletes", () => {
 
 test("dashboard stats only count activated athletes", () => {
   const source = fs.readFileSync(
-    "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/DashboardPage.tsx",
+    path.join(packageRoot, "src/pages/DashboardPage.tsx"),
     "utf8"
   );
 

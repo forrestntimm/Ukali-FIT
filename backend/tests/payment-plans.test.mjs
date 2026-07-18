@@ -2,17 +2,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const paymentPlansPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/paymentPlans.ts');
-const paymentRoutesPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/payments.ts');
-const paymentServicePath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/paymentService.ts');
-const schemaPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/prisma/schema.prisma');
-const classServicePath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/classService.ts');
-const checkInQrServicePath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/checkInQr.ts');
-const userServicePath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/userService.ts');
-const userRoutesPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/users.ts');
-const schedulingRoutesPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/scheduling.ts');
-const classRoutesPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/classes.ts');
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const paymentPlansPath = path.resolve(path.join(packageRoot, 'src/services/paymentPlans.ts'));
+const paymentRoutesPath = path.resolve(path.join(packageRoot, 'src/routes/payments.ts'));
+const paymentServicePath = path.resolve(path.join(packageRoot, 'src/services/paymentService.ts'));
+const schemaPath = path.resolve(path.join(packageRoot, 'prisma/schema.prisma'));
+const classServicePath = path.resolve(path.join(packageRoot, 'src/services/classService.ts'));
+const checkInQrServicePath = path.resolve(path.join(packageRoot, 'src/services/checkInQr.ts'));
+const userServicePath = path.resolve(path.join(packageRoot, 'src/services/userService.ts'));
+const userRoutesPath = path.resolve(path.join(packageRoot, 'src/routes/users.ts'));
+const schedulingRoutesPath = path.resolve(path.join(packageRoot, 'src/routes/scheduling.ts'));
+const classRoutesPath = path.resolve(path.join(packageRoot, 'src/routes/classes.ts'));
 
 test('backend defines gym payment plan presets including per-class kids pricing', () => {
   assert.ok(fs.existsSync(paymentPlansPath), 'backend should expose shared payment plan definitions');

@@ -49,6 +49,41 @@ export function extractBearerToken(header: string | undefined): string | null {
   return token;
 }
 
+type CachedAuthUser = {
+  id: string;
+  role: "ADMIN" | "MEMBER";
+  email: string;
+  webAccessApproved: boolean;
+};
+
+// Short-lived token -> local auth identity cache. Every authenticated request
+// otherwise costs a Supabase network round trip plus local user lookups.
+const AUTH_CACHE_TTL_MS = 60 * 1000;
+const AUTH_CACHE_MAX_ENTRIES = 500;
+const authUserCache = new Map<string, { authUser: CachedAuthUser; expiresAt: number }>();
+
+function readCachedAuthUser(token: string) {
+  const entry = authUserCache.get(token);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    authUserCache.delete(token);
+    return null;
+  }
+  return entry.authUser;
+}
+
+function writeCachedAuthUser(token: string, authUser: CachedAuthUser) {
+  if (authUserCache.size >= AUTH_CACHE_MAX_ENTRIES) {
+    const oldestKey = authUserCache.keys().next().value;
+    if (oldestKey !== undefined) authUserCache.delete(oldestKey);
+  }
+  authUserCache.set(token, { authUser, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+}
+
+export function clearAuthUserCache() {
+  authUserCache.clear();
+}
+
 export async function getSupabaseUserFromToken(accessToken: string): Promise<User | null> {
   const client = requireAdminClient();
   const { data, error } = await client.auth.getUser(accessToken);
@@ -56,9 +91,24 @@ export async function getSupabaseUserFromToken(accessToken: string): Promise<Use
   return data.user;
 }
 
+export async function resolveAuthUserFromSupabaseToken(accessToken: string) {
+  const cached = readCachedAuthUser(accessToken);
+  if (cached) {
+    return { authUser: cached };
+  }
+
+  const resolved = await resolveLocalUserFromSupabaseToken(accessToken);
+  if ("error" in resolved) {
+    return resolved;
+  }
+
+  writeCachedAuthUser(accessToken, resolved.authUser);
+  return { authUser: resolved.authUser };
+}
+
 export async function resolveLocalUserFromSupabaseToken(
   accessToken: string,
-  options: { markLogin?: boolean } = {}
+  options: { markLogin?: boolean; includeProfile?: boolean } = {}
 ) {
   const supabaseUser = await getSupabaseUserFromToken(accessToken);
   if (!supabaseUser) {
@@ -107,20 +157,25 @@ export async function resolveLocalUserFromSupabaseToken(
     await markAuthSuccess(localAuthUser.id);
   }
 
+  const authUser = {
+    id: localAuthUser.id,
+    role: localAuthUser.role,
+    email: localAuthUser.email,
+    webAccessApproved: localAuthUser.webAccessApproved
+  };
+
+  // The full profile (image, signup metrics) is only needed by bootstrap-style
+  // callers; middleware auth checks should stay lightweight.
+  if (!options.includeProfile) {
+    return { user: undefined, authUser };
+  }
+
   const user = await getUserById(localAuthUser.id);
   if (!user) {
     return { error: "AUTH_UNAUTHORIZED" as const };
   }
 
-  return {
-    user,
-    authUser: {
-      id: localAuthUser.id,
-      role: localAuthUser.role,
-      email: localAuthUser.email,
-      webAccessApproved: localAuthUser.webAccessApproved
-    }
-  };
+  return { user, authUser };
 }
 
 export async function sendInviteEmail(email: string, redirectTo = config.mobileCallbackUrl) {

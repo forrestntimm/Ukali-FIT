@@ -21,6 +21,14 @@ type DeviceTokenRecord = {
   badgeCount: number;
 };
 
+// Push sends only need token identifiers; selecting narrowly avoids dragging
+// full user rows (profile images, records) through every notification query.
+const deviceTokenSelect = {
+  id: true,
+  token: true,
+  badgeCount: true
+} as const;
+
 export async function clearDeviceBadgeCount(token: string) {
   return prisma.deviceToken.updateMany({
     where: { token },
@@ -81,7 +89,7 @@ export async function sendPaymentReminders() {
       nextPaymentDue: { gte: now, lte: threeDays },
       paymentStatus: "PAID"
     },
-    include: { deviceTokens: true }
+    select: { id: true, nextPaymentDue: true, deviceTokens: { select: deviceTokenSelect } }
   });
 
   for (const user of users) {
@@ -107,7 +115,7 @@ export async function sendOverdueAlerts() {
       nextPaymentDue: { lt: now },
       paymentStatus: "UNPAID"
     },
-    include: { deviceTokens: true }
+    select: { id: true, deviceTokens: { select: deviceTokenSelect } }
   });
 
   for (const user of users) {
@@ -158,7 +166,7 @@ function formatDateInAppTimeZone(date: Date) {
 export async function sendWeeklyWorkoutsUploadedNotification(args: { weekStart: Date; weekEnd: Date }) {
   const coaches = await prisma.user.findMany({
     where: { role: "ADMIN" },
-    include: { deviceTokens: true }
+    select: { id: true, deviceTokens: { select: deviceTokenSelect } }
   });
 
   const tokens = Array.from(new Map(coaches.flatMap((coach) => coach.deviceTokens).map((token) => [token.token, token])).values());
@@ -192,7 +200,7 @@ export async function sendCoachScheduleNotification(args: {
 }) {
   const coach = await prisma.user.findUnique({
     where: { id: args.coachId },
-    include: { deviceTokens: true }
+    select: { id: true, deviceTokens: { select: deviceTokenSelect } }
   });
 
   if (!coach) return;
@@ -219,16 +227,33 @@ export async function sendClassReminders() {
 
   const classes = await prisma.class.findMany({
     where: { datetime: { gte: now, lte: soon } },
-    include: { signups: { include: { user: { include: { deviceTokens: true } } } } }
+    select: {
+      id: true,
+      title: true,
+      datetime: true,
+      signups: {
+        select: {
+          user: {
+            select: { deviceTokens: { select: deviceTokenSelect } }
+          }
+        }
+      }
+    }
   });
 
   for (const klass of removeBlockedClassTimes(classes)) {
-    for (const signup of klass.signups) {
-      if (signup.user.deviceTokens.length === 0) continue;
-      await sendNotification(signup.user.deviceTokens, "Class Reminder", `${klass.title} is coming up soon.`, {
-        type: "class_reminder",
-        classId: klass.id
-      });
-    }
+    // One batched send per class: every signed-up member gets the same message.
+    const devices = Array.from(
+      new Map(
+        klass.signups
+          .flatMap((signup) => signup.user.deviceTokens)
+          .map((device) => [device.token, device])
+      ).values()
+    );
+    if (devices.length === 0) continue;
+    await sendNotification(devices, "Class Reminder", `${klass.title} is coming up soon.`, {
+      type: "class_reminder",
+      classId: klass.id
+    });
   }
 }

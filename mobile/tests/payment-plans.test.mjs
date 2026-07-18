@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const adminPaymentsPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/mobile/src/screens/AdminPaymentsManageScreen.tsx');
-const athletePaymentsPath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/mobile/src/screens/PaymentsScreen.tsx');
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const adminPaymentsPath = path.resolve(path.join(packageRoot, 'src/screens/AdminPaymentsManageScreen.tsx'));
+const athletePaymentsPath = path.resolve(path.join(packageRoot, 'src/screens/PaymentsScreen.tsx'));
 
 test('mobile admin payments screen fetches plan presets and limits members to athletes', () => {
   const source = fs.readFileSync(adminPaymentsPath, 'utf8');

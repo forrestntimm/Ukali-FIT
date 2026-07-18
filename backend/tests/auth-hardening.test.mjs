@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const backendRoot = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/backend");
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const backendRoot = path.resolve(packageRoot);
 const configPath = path.join(backendRoot, "src", "utils", "config.ts");
 const rateLimitPath = path.join(backendRoot, "src", "middleware", "rateLimit.ts");
 const authRoutesPath = path.join(backendRoot, "src", "routes", "auth.ts");

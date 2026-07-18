@@ -1,22 +1,26 @@
+import path from "node:path";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const appSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/App.tsx",
+  path.join(packageRoot, "src/App.tsx"),
   "utf8"
 );
 
 const loginSource = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/LoginPage.tsx",
+  path.join(packageRoot, "src/pages/LoginPage.tsx"),
   "utf8"
 );
 
 const splashSourcePath =
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/components/BrandedSplash.tsx";
+  path.join(packageRoot, "src/components/BrandedSplash.tsx");
 
 const globalStyles = fs.readFileSync(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/styles/global.css",
+  path.join(packageRoot, "src/styles/global.css"),
   "utf8"
 );
 

@@ -2,18 +2,21 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const notificationServicePath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/backend/src/services/notificationService.ts"
+  path.join(packageRoot, "src/services/notificationService.ts")
 );
 const backendVercelPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/backend/vercel.json"
+  path.join(packageRoot, "vercel.json")
 );
 const usersRoutePath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/users.ts"
+  path.join(packageRoot, "src/routes/users.ts")
 );
 const announcementsRoutePath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/backend/src/routes/announcements.ts"
+  path.join(packageRoot, "src/routes/announcements.ts")
 );
 
 test("payment reminders target active members before expiry, not already-unpaid accounts", () => {

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const mobileRoot = path.resolve("/Users/forresttimm/Documents/Ukali sign in app/mobile");
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const mobileRoot = path.resolve(packageRoot);
 const easConfigPath = path.join(mobileRoot, "eas.json");
 const appConfigPath = path.join(mobileRoot, "app.config.ts");
 const packageJsonPath = path.join(mobileRoot, "package.json");

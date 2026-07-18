@@ -2,27 +2,30 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const loginScreenPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/screens/LoginScreen.tsx"
+  path.join(packageRoot, "src/screens/LoginScreen.tsx")
 );
 const adminClassesPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/screens/AdminClassesManageScreen.tsx"
+  path.join(packageRoot, "src/screens/AdminClassesManageScreen.tsx")
 );
 const authContextPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/context/AuthContext.tsx"
+  path.join(packageRoot, "src/context/AuthContext.tsx")
 );
 const athleteRootPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/app/AthleteRoot.tsx"
+  path.join(packageRoot, "src/app/AthleteRoot.tsx")
 );
 const coachRootPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/app/CoachRoot.tsx"
+  path.join(packageRoot, "src/app/CoachRoot.tsx")
 );
 const appRootPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/App.tsx"
+  path.join(packageRoot, "App.tsx")
 );
 const pushNotificationsPath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/mobile/src/lib/pushNotifications.ts"
+  path.join(packageRoot, "src/lib/pushNotifications.ts")
 );
 
 test("coach login screen does not hide verification-code mode", () => {

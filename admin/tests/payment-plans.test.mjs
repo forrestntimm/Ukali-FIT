@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const paymentsPagePath = path.resolve('/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/PaymentsPage.tsx');
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const paymentsPagePath = path.resolve(path.join(packageRoot, 'src/pages/PaymentsPage.tsx'));
 
 test('admin payments page loads plan presets instead of relying on freeform amount entry', () => {
   const source = fs.readFileSync(paymentsPagePath, 'utf8');

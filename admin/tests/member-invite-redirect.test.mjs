@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const membersPagePath = path.resolve(
-  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/MembersPage.tsx"
+  path.join(packageRoot, "src/pages/MembersPage.tsx")
 );
 
 test("member invites use the athlete app callback instead of the admin web callback", () => {

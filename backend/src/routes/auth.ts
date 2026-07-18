@@ -44,7 +44,7 @@ router.post("/bootstrap", async (req, res) => {
 
   let resolved: Awaited<ReturnType<typeof resolveLocalUserFromSupabaseToken>>;
   try {
-    resolved = await resolveLocalUserFromSupabaseToken(token, { markLogin: true });
+    resolved = await resolveLocalUserFromSupabaseToken(token, { markLogin: true, includeProfile: true });
   } catch {
     return res.status(500).json({
       code: "AUTH_PROVIDER_MISCONFIGURED",

@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import { clearPageCache, isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
+import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
+import {
+  MEMBER_OPTIONS_CACHE_KEY,
+  PAYMENT_PLANS_CACHE_KEY,
+  PAYMENTS_BOOTSTRAP_TTL_MS
+} from "../lib/adminWarmups";
 
 type MemberOption = {
   id: string;
@@ -31,11 +36,7 @@ type PaymentRecord = {
   quantity?: number;
 };
 
-const MEMBER_OPTIONS_CACHE_KEY = "admin-users";
-const LEGACY_MEMBER_OPTIONS_CACHE_KEY = "admin-member-options";
-const PAYMENT_PLANS_CACHE_KEY = "payment-plans";
 const PAYMENT_HISTORY_CACHE_PREFIX = "payment-history:";
-const PAYMENTS_BOOTSTRAP_TTL_MS = 5 * 60 * 1000;
 const PAYMENT_HISTORY_TTL_MS = 2 * 60 * 1000;
 
 export default function PaymentsPage() {
@@ -72,10 +73,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const primaryCachedUsers = readPageCache<MemberOption[]>(MEMBER_OPTIONS_CACHE_KEY);
-    const legacyCachedUsers = readPageCache<MemberOption[]>(LEGACY_MEMBER_OPTIONS_CACHE_KEY);
-    const cachedUsers = primaryCachedUsers || legacyCachedUsers;
-    const usingLegacyUsersCache = !primaryCachedUsers && Boolean(legacyCachedUsers);
+    const cachedUsers = readPageCache<MemberOption[]>(MEMBER_OPTIONS_CACHE_KEY);
     const cachedPlans = readPageCache<PaymentPlan[]>(PAYMENT_PLANS_CACHE_KEY);
 
     if (cachedUsers) {
@@ -91,10 +89,7 @@ export default function PaymentsPage() {
       setLoadingPlans(false);
     }
 
-    const usersFresh =
-      !usingLegacyUsersCache &&
-      cachedUsers &&
-      isPageCacheFresh(cachedUsers.savedAt, PAYMENTS_BOOTSTRAP_TTL_MS);
+    const usersFresh = cachedUsers && isPageCacheFresh(cachedUsers.savedAt, PAYMENTS_BOOTSTRAP_TTL_MS);
     const plansFresh = cachedPlans && isPageCacheFresh(cachedPlans.savedAt, PAYMENTS_BOOTSTRAP_TTL_MS);
     if (usersFresh && plansFresh) {
       return () => {
@@ -119,7 +114,6 @@ export default function PaymentsPage() {
           const users = usersResult.value.data as MemberOption[];
           setMembers(users);
           if (!usersFresh) writePageCache(MEMBER_OPTIONS_CACHE_KEY, usersResult.value.data as MemberOption[]);
-          clearPageCache(LEGACY_MEMBER_OPTIONS_CACHE_KEY);
         } else {
           nextError = usersResult.reason?.response?.data?.message || "Could not load athletes.";
         }

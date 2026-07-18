@@ -76,13 +76,14 @@ export async function listUpcomingClasses(args?: { coachId?: string; from?: Date
   const coachId = args?.coachId;
   const from = args?.from;
   const to = args?.to;
+  const coachAssignmentWhere = coachId ? { OR: [{ coachId }, { secondaryCoachId: coachId }] } : {};
   const classes = await prisma.class.findMany({
     where: {
       datetime: {
         gte: from || new Date(),
         lte: to || undefined
       },
-      coachId: coachId || undefined
+      ...coachAssignmentWhere
     },
     orderBy: { datetime: "asc" },
     include: {
@@ -264,7 +265,129 @@ export async function listSchedulingClasses(args?: { from?: Date; to?: Date }) {
     }
   });
 
-  return removeBlockedClassTimes(classes);
+  return classes;
+}
+
+function getSchedulingClassSelect() {
+  return {
+    id: true,
+    title: true,
+    datetime: true,
+    capacity: true,
+    status: true,
+    coachId: true,
+    secondaryCoachId: true,
+    coach: {
+      select: {
+        id: true,
+        name: true,
+        email: true
+      }
+    },
+    secondaryCoach: {
+      select: {
+        id: true,
+        name: true,
+        email: true
+      }
+    }
+  };
+}
+
+export async function upsertSchedulingClass(input: {
+  title: string;
+  datetime: Date;
+  capacity: number;
+  primaryCoachId?: string | null;
+  secondaryCoachId?: string | null;
+}) {
+  if (input.primaryCoachId && input.secondaryCoachId && input.primaryCoachId === input.secondaryCoachId) {
+    const err = new Error("Primary and secondary coach must be different people.") as Error & {
+      status?: number;
+      code?: string;
+    };
+    err.status = 400;
+    err.code = "CLASS_DUPLICATE_COACH_ASSIGNMENT";
+    throw err;
+  }
+
+  await Promise.all([
+    assertOptionalCoachExists(input.primaryCoachId),
+    assertOptionalCoachExists(input.secondaryCoachId)
+  ]);
+
+  const existing = await prisma.class.findFirst({
+    where: { datetime: input.datetime },
+    select: { id: true, coachId: true, secondaryCoachId: true }
+  });
+
+  if (existing) {
+    const nextPrimaryCoachId = input.primaryCoachId === undefined ? existing.coachId : input.primaryCoachId;
+    const nextSecondaryCoachId =
+      input.secondaryCoachId === undefined ? existing.secondaryCoachId : input.secondaryCoachId;
+
+    if (nextPrimaryCoachId && nextSecondaryCoachId && nextPrimaryCoachId === nextSecondaryCoachId) {
+      const err = new Error("Primary and secondary coach must be different people.") as Error & {
+        status?: number;
+        code?: string;
+      };
+      err.status = 400;
+      err.code = "CLASS_DUPLICATE_COACH_ASSIGNMENT";
+      throw err;
+    }
+
+    const updated = await prisma.class.update({
+      where: { id: existing.id },
+      data: {
+        title: input.title,
+        capacity: input.capacity,
+        coachId: nextPrimaryCoachId || null,
+        secondaryCoachId: nextSecondaryCoachId || null
+      },
+      select: getSchedulingClassSelect()
+    });
+
+    const newlyAssignedCoachIds = [updated.coachId, updated.secondaryCoachId]
+      .filter(Boolean)
+      .filter((coachId) => coachId !== existing.coachId && coachId !== existing.secondaryCoachId) as string[];
+
+    for (const coachId of newlyAssignedCoachIds) {
+      void sendCoachScheduleNotification({
+        coachId,
+        classId: updated.id,
+        classTitle: updated.title,
+        classDateTime: updated.datetime
+      }).catch((err) => {
+        logger.error({ err, classId: updated.id, coachId }, "Failed to send coach schedule notification");
+      });
+    }
+
+    return updated;
+  }
+
+  const created = await prisma.class.create({
+    data: {
+      title: input.title,
+      datetime: input.datetime,
+      capacity: input.capacity,
+      coachId: input.primaryCoachId || null,
+      secondaryCoachId: input.secondaryCoachId || null
+    },
+    select: getSchedulingClassSelect()
+  });
+
+  for (const coachId of [created.coachId, created.secondaryCoachId].filter(Boolean) as string[]) {
+    void sendCoachScheduleNotification({
+      coachId,
+      classId: created.id,
+      classTitle: created.title,
+      classDateTime: created.datetime
+    }).catch((err) => {
+      logger.error({ err, classId: created.id, coachId }, "Failed to send coach schedule notification");
+    });
+  }
+
+  return created;
 }
 
 export async function updateClassStatus(id: string, status: ClassStatus) {
@@ -598,7 +721,7 @@ export async function checkInMemberForClass(
 
   const klass = await prisma.class.findUnique({
     where: { id: classId },
-    select: { id: true, title: true, datetime: true, status: true, coachId: true }
+    select: { id: true, title: true, datetime: true, status: true, coachId: true, secondaryCoachId: true }
   });
   if (!klass) {
     const err = new Error("Class not found") as Error & { status?: number; code?: string };
@@ -618,7 +741,8 @@ export async function checkInMemberForClass(
     err.code = "CLASS_COACH_NOT_ASSIGNED";
     throw err;
   }
-  if (actorCoachId && klass.coachId !== actorCoachId) {
+  const assignedCoachIds = [klass.coachId, klass.secondaryCoachId].filter(Boolean);
+  if (actorCoachId && !assignedCoachIds.includes(actorCoachId)) {
     const err = new Error("You are not assigned to coach this class") as Error & { status?: number; code?: string };
     err.status = 403;
     err.code = "CLASS_COACH_MISMATCH";

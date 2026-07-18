@@ -60,7 +60,7 @@ function buildTabScreenOptions(routeName: string) {
 
 function AthleteTabsNavigator() {
   return (
-    <AthleteTabs.Navigator screenOptions={({ route }) => buildTabScreenOptions(route.name)}>
+    <AthleteTabs.Navigator detachInactiveScreens={false} screenOptions={({ route }) => buildTabScreenOptions(route.name)}>
       <AthleteTabs.Screen name="Dashboard" component={DashboardScreen} />
       <AthleteTabs.Screen name="Classes" component={ClassesScreen} />
       <AthleteTabs.Screen name="Announcements" component={CommunityScreen} />
@@ -77,13 +77,26 @@ export default function AthleteRoot() {
 
     const run = async () => {
       try {
-        const res = await api.get("/classes");
-        await writeScreenCache("classes", {
-          classes: res.data,
-          savedAt: Date.now()
-        });
+        const [classesRes, announcementsRes] = await Promise.allSettled([
+          api.get("/classes"),
+          api.get("/announcements")
+        ]);
+
+        if (classesRes.status === "fulfilled") {
+          await writeScreenCache("classes", {
+            classes: classesRes.value.data,
+            savedAt: Date.now()
+          });
+        }
+
+        if (announcementsRes.status === "fulfilled") {
+          await writeScreenCache("announcements", {
+            announcements: announcementsRes.value.data,
+            savedAt: Date.now()
+          });
+        }
       } catch (error) {
-        console.error("[classes] Athlete prefetch failed", error);
+        console.error("[tabs] Athlete prefetch failed", error);
       }
     };
 

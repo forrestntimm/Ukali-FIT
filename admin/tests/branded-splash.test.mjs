@@ -31,6 +31,25 @@ test("admin login page uses the branded splash shell", () => {
   assert.match(loginSource, /<BrandedSplash[\s\S]*title="Ukali Admin"[\s\S]*subtitle="Sign in to manage the gym\."[\s\S]*>/);
 });
 
+test("admin login page can remember email and sign-in preference without storing passwords", () => {
+  assert.match(loginSource, /admin_remember_login/, "login should persist the remember-me setting");
+  assert.match(loginSource, /admin_remembered_email/, "login should remember the email on this device");
+  assert.match(loginSource, /Keep me signed in/, "login should expose a keep-signed-in control");
+  assert.doesNotMatch(loginSource, /localStorage\.setItem\([^)]*password/i, "login should never store passwords");
+});
+
+test("admin login page opens on email password and keeps magic code last", () => {
+  assert.match(loginSource, /DEFAULT_LOGIN_MODE: Mode = "password"/, "login should default to email/password");
+  assert.ok(
+    loginSource.indexOf("Email Password") < loginSource.indexOf("Magic Code"),
+    "email/password tab should appear before magic code"
+  );
+  assert.ok(
+    loginSource.indexOf("Set or Reset Password") < loginSource.indexOf("Magic Code"),
+    "magic code tab should be the last login option"
+  );
+});
+
 test("global styles include branded splash background treatment", () => {
   assert.match(globalStyles, /\.branded-splash/);
   assert.match(globalStyles, /backdrop-filter: blur\(12px\)/);

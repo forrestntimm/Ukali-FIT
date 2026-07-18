@@ -52,7 +52,17 @@
     }
   },
   "submit": {
-    "athlete-production": {},
-    "coach-production": {}
+    "athlete-production": {
+      "ios": {
+        "ascAppId": "6760805910",
+        "bundleIdentifier": "com.forresttimm.ukalifit"
+      }
+    },
+    "coach-production": {
+      "ios": {
+        "ascAppId": "6760931766",
+        "bundleIdentifier": "com.forresttimm.ukaliadmin"
+      }
+    }
   }
 }

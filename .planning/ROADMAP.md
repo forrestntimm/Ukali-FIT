@@ -8,7 +8,7 @@ This brownfield roadmap is focused on stabilizing the product that already exist
 
 - [x] **Phase 1: Auth And Release Reliability** - stabilize sign-in flows, session persistence, crash resistance, and local release workflows
 - [x] **Phase 2: Performance Hardening** - reduce slow loads across mobile tabs and admin web pages
-- [ ] **Phase 3: Gym Operations Correctness** - tighten classes, check-in, payments, and scheduling behavior
+- [x] **Phase 3: Gym Operations Correctness** - tighten classes, check-in, payments, and scheduling behavior
 - [ ] **Phase 4: Notification And Android Expansion** - harden push notifications and prepare Android release parity
 
 ## Phase Details
@@ -54,9 +54,9 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 03-01: Validate and harden QR/check-in/counter flows end to end
-- [ ] 03-02: Align payment plan logic and athlete filtering across surfaces
-- [ ] 03-03: Verify scheduling and class assignment correctness across web and mobile
+- [x] 03-01: Validate and harden QR/check-in/counter flows end to end
+- [x] 03-02: Align payment plan logic and athlete filtering across surfaces
+- [x] 03-03: Verify scheduling and class assignment correctness across web and mobile
 
 ### Phase 4: Notification And Android Expansion
 **Goal**: Extend reliability to push communications and Android release readiness.
@@ -78,5 +78,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Auth And Release Reliability | 3/3 | Complete | 2026-03-30 |
 | 2. Performance Hardening | 3/3 | Complete | 2026-03-30 |
-| 3. Gym Operations Correctness | 0/3 | Not started | - |
+| 3. Gym Operations Correctness | 3/3 | Complete | 2026-07-17 |
 | 4. Notification And Android Expansion | 0/2 | Not started | - |

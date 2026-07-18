@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
-
-const DASHBOARD_STATS_CACHE_KEY = "admin-dashboard-stats";
-const DASHBOARD_STATS_TTL_MS = 2 * 60 * 1000;
+import { DASHBOARD_STATS_CACHE_KEY, DASHBOARD_STATS_TTL_MS } from "../lib/adminWarmups";
 
 type DashboardStats = {
   members: number;

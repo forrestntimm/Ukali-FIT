@@ -86,3 +86,25 @@ test("checked-in classes drive both the total attended counter and workout strea
     assert.equal(profile.membershipStatus, "ACTIVE");
   });
 });
+
+test("class check-in authorization accepts secondary assigned coaches", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(path.resolve(__dirname, "../src/services/classService.ts"), "utf8");
+
+  assert.match(
+    source,
+    /select:\s*{[^}]*coachId:\s*true,\s*secondaryCoachId:\s*true/s,
+    "check-in lookup should include both primary and secondary coach assignments"
+  );
+  assert.match(
+    source,
+    /assignedCoachIds\s*=\s*\[klass\.coachId,\s*klass\.secondaryCoachId\]\.filter\(Boolean\)/,
+    "check-in authorization should consider both assigned coach ids"
+  );
+  assert.match(
+    source,
+    /actorCoachId\s*&&\s*!assignedCoachIds\.includes\(actorCoachId\)/,
+    "check-in should only reject admins/coaches who are not assigned in either role"
+  );
+});

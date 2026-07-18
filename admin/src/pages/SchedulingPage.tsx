@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
+import { COACHES_CACHE_KEY, SCHEDULING_CACHE_TTL_MS } from "../lib/adminWarmups";
 
 const APP_TIME_ZONE = "Asia/Kathmandu";
-const SCHEDULING_CACHE_TTL_MS = 5 * 60 * 1000;
 const DATE_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   timeZone: APP_TIME_ZONE,
   year: "numeric",
@@ -31,6 +31,12 @@ const TIME_LABEL_FORMATTER = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
   hour12: false
 });
+const SCHEDULE_START_HOUR = 6;
+const SCHEDULE_END_HOUR = 17;
+const HOURLY_TIME_KEYS = Array.from(
+  { length: SCHEDULE_END_HOUR - SCHEDULE_START_HOUR + 1 },
+  (_, index) => `${String(SCHEDULE_START_HOUR + index).padStart(2, "0")}:00`
+);
 
 type Coach = {
   id: string;
@@ -137,6 +143,13 @@ function formatTimeLabel(value: string) {
   return TIME_LABEL_FORMATTER.format(new Date(value));
 }
 
+function formatHourLabel(timeKey: string) {
+  const hour = Number(timeKey.slice(0, 2));
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:00 ${suffix}`;
+}
+
 function decorateScheduleItems(items: ScheduleItem[]): ScheduleClassCell[] {
   return items.map((item) => ({
     ...item,
@@ -155,6 +168,14 @@ function getAssignmentKey(classId: string, role: CoachAssignmentRole) {
   return `${classId}:${role}`;
 }
 
+function getSlotAssignmentKey(dayKey: string, timeKey: string, role: CoachAssignmentRole) {
+  return `${dayKey}:${timeKey}:${role}`;
+}
+
+function buildScheduleDateTimeIso(dayKey: string, timeKey: string) {
+  return new Date(`${dayKey}T${timeKey}:00+05:45`).toISOString();
+}
+
 function getApiErrorMessage(err: any, fallback: string) {
   const apiMessage = err?.response?.data?.message;
   if (typeof apiMessage === "string" && apiMessage.trim().length > 0) return apiMessage;
@@ -169,6 +190,7 @@ export default function SchedulingPage() {
   const [scheduleItems, setScheduleItems] = useState<ScheduleClassCell[]>([]);
   const [coachAssignmentsByClassId, setCoachAssignmentsByClassId] = useState<Record<string, CoachAssignmentState>>({});
   const [savingClassIds, setSavingClassIds] = useState<Record<string, boolean>>({});
+  const [savingSlotKeys, setSavingSlotKeys] = useState<Record<string, boolean>>({});
   const [editingAssignmentKey, setEditingAssignmentKey] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -184,6 +206,7 @@ export default function SchedulingPage() {
 
   const weekEndKey = weekDayKeys[weekDayKeys.length - 1];
   const weekHeaderLabel = useMemo(() => formatWeekHeader(weekStartKey), [weekStartKey]);
+  const scheduleCacheKey = useMemo(() => `scheduling:${weekStartKey}:${weekEndKey}`, [weekEndKey, weekStartKey]);
 
   const coachesById = useMemo(() => {
     return new Map(coaches.map((coach) => [coach.id, coach]));
@@ -193,9 +216,8 @@ export default function SchedulingPage() {
     let cancelled = false;
     const from = `${weekStartKey}T00:00:00.000Z`;
     const to = `${weekEndKey}T23:59:59.999Z`;
-    const scheduleCacheKey = `scheduling:${weekStartKey}:${weekEndKey}`;
 
-    const cachedUsers = readPageCache<Coach[]>("admin-coaches");
+    const cachedUsers = readPageCache<Coach[]>(COACHES_CACHE_KEY);
     const cachedSchedule = readPageCache<ScheduleItem[]>(scheduleCacheKey);
 
     if (cachedUsers) {
@@ -233,7 +255,7 @@ export default function SchedulingPage() {
         setCoaches(adminCoaches);
         setScheduleItems(classes);
         setCoachAssignmentsByClassId(buildCoachAssignments(classes));
-        if (!usersFresh) writePageCache("admin-coaches", adminCoaches);
+        if (!usersFresh) writePageCache(COACHES_CACHE_KEY, adminCoaches);
         if (!scheduleFresh) writePageCache(scheduleCacheKey, classesRes.data as ScheduleItem[]);
         setErrorMessage(null);
       } catch (err: any) {
@@ -249,21 +271,37 @@ export default function SchedulingPage() {
     return () => {
       cancelled = true;
     };
-  }, [weekEndKey, weekStartKey]);
+  }, [scheduleCacheKey, weekEndKey, weekStartKey]);
 
   const slotRows = useMemo<SlotRow[]>(() => {
     const dayKeySet = new Set(weekDayKeys);
     const slots = new Map<string, SlotRow>();
+
+    for (const timeKey of HOURLY_TIME_KEYS) {
+      const timeLabel = formatHourLabel(timeKey);
+      slots.set(timeKey, {
+        slotKey: timeKey,
+        title: "Open slot",
+        timeKey,
+        timeLabel,
+        label: timeLabel,
+        byDayKey: {}
+      });
+    }
 
     for (const item of scheduleItems) {
       const dayKey = item.dayKey;
       if (!dayKeySet.has(dayKey)) continue;
 
       const timeKey = item.timeKey;
-      const slotKey = `${timeKey}__${item.title}`;
+      const defaultHourlySlot = slots.get(timeKey);
+      const slotKey = defaultHourlySlot ? timeKey : `${timeKey}__${item.title}`;
       const existing = slots.get(slotKey);
 
       if (existing) {
+        existing.title = item.title;
+        existing.timeLabel = item.timeLabel;
+        existing.label = defaultHourlySlot ? item.timeLabel : `${item.timeLabel} ${item.title}`;
         existing.byDayKey[dayKey] = item;
         continue;
       }
@@ -283,6 +321,10 @@ export default function SchedulingPage() {
       return a.timeKey.localeCompare(b.timeKey);
     });
   }, [scheduleItems, weekDayKeys]);
+
+  const writeScheduleCacheFromItems = (items: ScheduleClassCell[]) => {
+    writePageCache(scheduleCacheKey, items);
+  };
 
   const saveCoachAssignments = async (
     item: ScheduleClassCell,
@@ -318,7 +360,11 @@ export default function SchedulingPage() {
         }
       }));
 
-      setScheduleItems((prev) => prev.map((entry) => (entry.id === item.id ? updated : entry)));
+      setScheduleItems((prev) => {
+        const nextItems = prev.map((entry) => (entry.id === item.id ? updated : entry));
+        writeScheduleCacheFromItems(nextItems);
+        return nextItems;
+      });
       setEditingAssignmentKey(null);
       setSuccessMessage(
         `${item.title} on ${formatWeekdayLabel(getDateKeyInAppTimeZone(item.datetime))} ${roleLabel} coach saved.`
@@ -350,6 +396,73 @@ export default function SchedulingPage() {
     }));
 
     void saveCoachAssignments(item, nextAssignments, role === "primaryCoachId" ? "primary" : "secondary");
+  };
+
+  const createScheduleSlotAssignment = async (
+    dayKey: string,
+    timeKey: string,
+    role: CoachAssignmentRole,
+    coachId: string
+  ) => {
+    if (!coachId) return;
+
+    const assignmentKey = getSlotAssignmentKey(dayKey, timeKey, role);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+    setSavingSlotKeys((prev) => ({ ...prev, [assignmentKey]: true }));
+
+    try {
+      const response = await api.post<ScheduleItem>("/scheduling/classes", {
+        title: "Coaching Slot",
+        datetime: buildScheduleDateTimeIso(dayKey, timeKey),
+        capacity: 20,
+        primaryCoachId: role === "primaryCoachId" ? coachId : null,
+        secondaryCoachId: role === "secondaryCoachId" ? coachId : null
+      });
+      const created = decorateScheduleItems([response.data])[0];
+
+      setCoachAssignmentsByClassId((prev) => ({
+        ...prev,
+        [created.id]: {
+          primaryCoachId: created.coachId || "",
+          secondaryCoachId: created.secondaryCoachId || ""
+        }
+      }));
+
+      setScheduleItems((prev) => {
+        const withoutDuplicate = prev.filter((entry) => entry.id !== created.id);
+        const nextItems = [...withoutDuplicate, created].sort((a, b) => a.datetime.localeCompare(b.datetime));
+        writeScheduleCacheFromItems(nextItems);
+        return nextItems;
+      });
+      setSuccessMessage(`${formatWeekdayLabel(dayKey)} ${formatHourLabel(timeKey)} coach saved.`);
+    } catch (err: any) {
+      setErrorMessage(getApiErrorMessage(err, "Could not save coach assignment."));
+    } finally {
+      setSavingSlotKeys((prev) => ({ ...prev, [assignmentKey]: false }));
+    }
+  };
+
+  const renderOpenSlotSelect = (dayKey: string, slot: SlotRow, role: CoachAssignmentRole) => {
+    const assignmentKey = getSlotAssignmentKey(dayKey, slot.timeKey, role);
+    const saving = savingSlotKeys[assignmentKey];
+
+    return (
+      <select
+        className="schedule-coach-select"
+        value=""
+        disabled={saving || coaches.length === 0}
+        onChange={(e) => createScheduleSlotAssignment(dayKey, slot.timeKey, role, e.target.value)}
+        aria-label={`${formatWeekdayLabel(dayKey)} ${slot.timeLabel} ${role === "primaryCoachId" ? "primary" : "secondary"} coach`}
+      >
+        <option value="">{saving ? "Saving..." : "Assign coach"}</option>
+        {coaches.map((coachOption) => (
+          <option key={coachOption.id} value={coachOption.id}>
+            {coachOption.name}
+          </option>
+        ))}
+      </select>
+    );
   };
 
   const renderCoachCell = (item: ScheduleClassCell, role: CoachAssignmentRole) => {
@@ -384,10 +497,10 @@ export default function SchedulingPage() {
     return (
       <div className="schedule-coach-cell">
         <select
+          className="schedule-coach-select"
           value={value}
           disabled={saving}
           onChange={(e) => updateCoachAssignment(item, role, e.target.value)}
-          style={{ width: "100%" }}
         >
           <option value="">Unassigned</option>
           {coaches.map((coachOption) => (
@@ -425,6 +538,11 @@ export default function SchedulingPage() {
               <p style={{ color: "var(--muted)", margin: "8px 0 0" }}>
                 Every admin user appears in the primary and secondary coach dropdowns.
               </p>
+              {coaches.length === 0 && !loadingScheduleData ? (
+                <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>
+                  No admin coaches are available yet.
+                </p>
+              ) : null}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <button
@@ -449,14 +567,12 @@ export default function SchedulingPage() {
           {successMessage ? <p style={{ color: "var(--success)", marginTop: 12 }}>{successMessage}</p> : null}
           {errorMessage ? <p style={{ color: "var(--danger)", marginTop: 12 }}>{errorMessage}</p> : null}
 
-          {loadingScheduleData ? null : slotRows.length === 0 ? (
-            <p style={{ color: "var(--muted)", marginTop: 16 }}>No classes found for this week.</p>
-          ) : (
+          {loadingScheduleData ? null : (
             <div style={{ overflowX: "auto", marginTop: 16 }}>
               <table className="table schedule-grid-table">
                 <thead>
                   <tr>
-                    <th style={{ minWidth: 220 }}>Week of the {weekHeaderLabel}</th>
+                    <th style={{ minWidth: 180 }}>Time</th>
                     <th style={{ minWidth: 170 }}>Primary / Secondary</th>
                     {weekDayKeys.map((dayKey) => (
                       <th key={dayKey} style={{ minWidth: 190 }}>
@@ -476,7 +592,11 @@ export default function SchedulingPage() {
                         {weekDayKeys.map((dayKey) => {
                           const item = slot.byDayKey[dayKey];
                           if (!item) {
-                            return <td key={`${slot.slotKey}-${dayKey}-primary`} className="schedule-empty-cell" />;
+                            return (
+                              <td key={`${slot.slotKey}-${dayKey}-primary`} className="schedule-empty-cell">
+                                {renderOpenSlotSelect(dayKey, slot, "primaryCoachId")}
+                              </td>
+                            );
                           }
 
                           const value = coachAssignmentsByClassId[item.id]?.primaryCoachId ?? item.coachId ?? "";
@@ -494,7 +614,11 @@ export default function SchedulingPage() {
                         {weekDayKeys.map((dayKey) => {
                           const item = slot.byDayKey[dayKey];
                           if (!item) {
-                            return <td key={`${slot.slotKey}-${dayKey}-secondary`} className="schedule-empty-cell" />;
+                            return (
+                              <td key={`${slot.slotKey}-${dayKey}-secondary`} className="schedule-empty-cell">
+                                {renderOpenSlotSelect(dayKey, slot, "secondaryCoachId")}
+                              </td>
+                            );
                           }
 
                           const primaryValue =

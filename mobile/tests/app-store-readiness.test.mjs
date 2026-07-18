@@ -306,6 +306,102 @@ test("class schedule screens seed stale-refresh from cache so reopen stays fast"
   );
 });
 
+test("mobile tabs keep opened screens warm and use cache-first refresh behavior across non-class tabs", () => {
+  const athleteRootSource = fs.readFileSync(athleteRootPath, "utf8");
+  const coachRootSource = fs.readFileSync(coachRootPath, "utf8");
+  const communityScreenSource = fs.readFileSync(path.join(mobileRoot, "src", "screens", "CommunityScreen.tsx"), "utf8");
+  const profileScreenSource = fs.readFileSync(path.join(mobileRoot, "src", "screens", "ProfileScreen.tsx"), "utf8");
+  const adminMembersSource = fs.readFileSync(adminMembersPath, "utf8");
+  const adminPaymentsSource = fs.readFileSync(adminPaymentsManagePath, "utf8");
+  const adminScanSource = fs.readFileSync(adminScanPath, "utf8");
+
+  assert.match(
+    athleteRootSource,
+    /AthleteTabs\.Navigator[\s\S]*detachInactiveScreens=\{false\}/s,
+    "athlete tabs should keep opened tab screens attached so switching between them stays instant after first paint"
+  );
+  assert.match(
+    coachRootSource,
+    /CoachTabs\.Navigator[\s\S]*detachInactiveScreens=\{false\}/s,
+    "coach tabs should keep opened tab screens attached so switching between them stays instant after first paint"
+  );
+  assert.match(
+    communityScreenSource,
+    /peekScreenCache<.*>\("announcements"\)/s,
+    "announcements tab should synchronously seed from the in-memory cache before any async storage or network work"
+  );
+  assert.match(
+    communityScreenSource,
+    /seedLoadedAt\(cached\.savedAt\)/,
+    "announcements tab should seed stale-refresh freshness from the cached timestamp"
+  );
+  assert.match(
+    communityScreenSource,
+    /5 \* 60 \* 1000/,
+    "announcements tab should use a longer freshness window so switching back to it does not immediately refetch"
+  );
+  assert.match(
+    athleteRootSource,
+    /writeScreenCache\("announcements"/,
+    "athlete root should warm the announcements cache before the member opens that tab for the first time"
+  );
+  assert.match(
+    profileScreenSource,
+    /useStaleFocusRefresh\(/,
+    "profile tab should use the stale-focus refresh helper instead of always doing heavy focus work immediately"
+  );
+  assert.match(
+    profileScreenSource,
+    /seedLoadedAt\(cached\.savedAt\)/,
+    "profile tab should seed stale-refresh freshness from its cached coach/admin profile payload"
+  );
+  assert.match(
+    profileScreenSource,
+    /5 \* 60 \* 1000/,
+    "profile tab should use a longer freshness window so switching back to it stays warm"
+  );
+  assert.match(
+    adminMembersSource,
+    /5 \* 60 \* 1000/,
+    "admin members tab should use a longer freshness window so switching back to it does not immediately refetch"
+  );
+  assert.match(
+    adminPaymentsSource,
+    /useStaleFocusRefresh\(/,
+    "admin payments manager should use stale-focus refresh instead of reloading members and plans on every focus"
+  );
+  assert.match(
+    adminPaymentsSource,
+    /seedLoadedAt\(cached\.savedAt\)/,
+    "admin payments manager should seed stale-refresh freshness from its cached payment options"
+  );
+  assert.match(
+    adminPaymentsSource,
+    /5 \* 60 \* 1000/,
+    "admin payments manager should use a longer freshness window so switching back to it stays warm"
+  );
+  assert.doesNotMatch(
+    adminPaymentsSource,
+    /useFocusEffect/,
+    "admin payments manager should not keep a custom every-focus reload path for payment options"
+  );
+  assert.match(
+    adminScanSource,
+    /useStaleFocusRefresh\(/,
+    "admin scan tab should use a stale-focus refresh path for class-shell loading instead of reloading the shell on every focus"
+  );
+  assert.match(
+    adminScanSource,
+    /seedLoadedAt\(cached\.savedAt\)/,
+    "admin scan tab should seed stale-refresh freshness from the cached check-in shell payload"
+  );
+  assert.match(
+    adminScanSource,
+    /savedAt:\s*Date\.now\(\)/,
+    "admin scan tab should persist a savedAt timestamp so the shell can stay warm between tab switches"
+  );
+});
+
 test("coach classes flow uses coaching schedule wording and expands selected class details in place", () => {
   const adminDashboardSource = fs.readFileSync(adminDashboardPath, "utf8");
   const adminClassesScreenSource = fs.readFileSync(adminClassesManagePath, "utf8");

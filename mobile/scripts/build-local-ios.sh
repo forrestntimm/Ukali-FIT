@@ -86,6 +86,7 @@ if [[ "$bundle_identifier" == '$('*')' ]]; then
     xcodebuild \
       -workspace "$workspace_path" \
       -scheme "$project_name" \
+      -destination "generic/platform=iOS" \
       -showBuildSettings 2>/dev/null | \
       awk -F' = ' '/^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER = / { print $2; exit }'
   )"

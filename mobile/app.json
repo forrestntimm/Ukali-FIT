@@ -33,7 +33,7 @@
     "ios": {
       "bundleIdentifier": "com.forresttimm.ukalifit",
       "supportsTablet": true,
-      "buildNumber": "49"
+      "buildNumber": "50"
     },
     "android": {
       "adaptiveIcon": {

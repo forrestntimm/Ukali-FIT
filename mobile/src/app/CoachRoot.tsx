@@ -114,7 +114,7 @@ function buildTabScreenOptions(routeName: string) {
 
 function CoachTabsNavigator() {
   return (
-    <CoachTabs.Navigator screenOptions={({ route }) => buildTabScreenOptions(route.name)}>
+    <CoachTabs.Navigator detachInactiveScreens={false} screenOptions={({ route }) => buildTabScreenOptions(route.name)}>
       <CoachTabs.Screen name="Dashboard" component={AdminDashboardScreen} />
       <CoachTabs.Screen name="Members" component={AdminMembersScreen} />
       <CoachTabs.Screen

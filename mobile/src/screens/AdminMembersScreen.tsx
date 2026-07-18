@@ -47,7 +47,7 @@ export default function AdminMembersScreen() {
     }
   }, [members.length]);
 
-  const { seedLoadedAt } = useStaleFocusRefresh(load, 30000);
+  const { seedLoadedAt } = useStaleFocusRefresh(load, 5 * 60 * 1000);
 
   useEffect(() => {
     void (async () => {

@@ -2,9 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
 import { extractRetryAfterSeconds, getSecondsRemaining } from "../utils/rate-limit";
-
-const USERS_CACHE_KEY = "admin-users";
-const USERS_CACHE_TTL_MS = 2 * 60 * 1000;
+import { ADMIN_MEMBERS_CACHE_KEY, ADMIN_MEMBERS_TTL_MS } from "../lib/adminWarmups";
 
 export default function MembersPage() {
   const [members, setMembers] = useState<any[]>([]);
@@ -21,12 +19,12 @@ export default function MembersPage() {
   const memberAppRedirectTo = import.meta.env.VITE_MEMBER_APP_REDIRECT_URL?.trim() || "ukali://auth/callback";
 
   const load = async ({ force = false, background = false }: { force?: boolean; background?: boolean } = {}) => {
-    const cachedMembers = readPageCache<any[]>(USERS_CACHE_KEY);
+    const cachedMembers = readPageCache<any[]>(ADMIN_MEMBERS_CACHE_KEY);
 
     if (!force && cachedMembers) {
       setMembers(cachedMembers.data);
       setError(null);
-      if (isPageCacheFresh(cachedMembers.savedAt, USERS_CACHE_TTL_MS)) {
+      if (isPageCacheFresh(cachedMembers.savedAt, ADMIN_MEMBERS_TTL_MS)) {
         setLoadingMembers(false);
         return;
       }
@@ -38,7 +36,7 @@ export default function MembersPage() {
       const res = await api.get("/users");
       const nextMembers = res.data as any[];
       setMembers(nextMembers);
-      writePageCache(USERS_CACHE_KEY, nextMembers);
+      writePageCache(ADMIN_MEMBERS_CACHE_KEY, nextMembers);
       setError(null);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Could not load members.");
@@ -166,9 +164,9 @@ export default function MembersPage() {
     <div className="page">
       <h1>Members</h1>
       <div className="grid grid-members">
-        <div className="card">
+        <div className="card member-invite-card">
           <h3>Invite Member</h3>
-          <form style={{ display: "grid", gap: 12 }} onSubmit={invite}>
+          <form className="member-invite-form" onSubmit={invite}>
             <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -198,52 +196,70 @@ export default function MembersPage() {
             </button>
           </div>
           {loadingMembers ? <p style={{ color: "var(--muted)" }}>Loading members...</p> : null}
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Age</th>
-                <th>Goals</th>
-                <th>Streak</th>
-                <th>Classes</th>
-                <th>Membership</th>
-                <th>Status</th>
-                <th>Days Left</th>
-                <th>Next Due</th>
-                <th>QR Code</th>
-                <th>Web Access</th>
-                <th>Invite</th>
-                <th>Approval</th>
-              </tr>
-            </thead>
-            <tbody>
+          {members.length === 0 && !loadingMembers ? (
+            <p style={{ color: "var(--muted)" }}>No members found.</p>
+          ) : (
+            <div className="members-list">
               {members.map((m) => {
                 const resendCooldownSeconds = getSecondsRemaining(resendCooldownUntilByUserId[m.id], clockNowMs);
                 const isResending = Boolean(resendingByUserId[m.id]);
                 const isApproving = Boolean(approvingByUserId[m.id]);
 
                 return (
-                  <tr key={m.id}>
-                    <td>{m.name}</td>
-                    <td>{m.age ?? "-"}</td>
-                    <td>{m.fitnessGoals || "-"}</td>
-                    <td>{m.workoutStreak ?? 0}</td>
-                    <td>{m.classesTotalAttended ?? 0}</td>
-                    <td>{m.membershipStatus}</td>
-                    <td>
-                      <span className={`badge ${m.paymentStatus === "PAID" ? "success" : "danger"}`}>
-                        {m.paymentStatus}
-                      </span>
-                    </td>
-                    <td>{m.daysLeftInMembership ?? 0}</td>
-                    <td>{m.nextPaymentDue ? new Date(m.nextPaymentDue).toLocaleDateString() : "-"}</td>
-                    <td><code>{m.checkInQrCode || "-"}</code></td>
-                    <td>
-                      <span className={`badge ${m.webAccessApproved ? "success" : "danger"}`}>
-                        {m.webAccessApproved ? "APPROVED" : "PENDING"}
-                      </span>
-                    </td>
-                    <td>
+                  <article className="member-record" key={m.id}>
+                    <div className="member-record-main">
+                      <div className="member-record-header">
+                        <div>
+                          <h4 className="member-record-name">{m.name}</h4>
+                          <p className="member-record-subtitle">{m.fitnessGoals || "No fitness goals listed."}</p>
+                        </div>
+                        <div className="member-record-badges">
+                          <span className={`badge ${m.paymentStatus === "PAID" ? "success" : "danger"}`}>
+                            {m.paymentStatus}
+                          </span>
+                          <span className={`badge ${m.webAccessApproved ? "success" : "danger"}`}>
+                            {m.webAccessApproved ? "WEB APPROVED" : "WEB PENDING"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="member-detail-grid">
+                        <div className="member-detail">
+                          <span>Age</span>
+                          <strong>{m.age ?? "-"}</strong>
+                        </div>
+                        <div className="member-detail">
+                          <span>Streak</span>
+                          <strong>{m.workoutStreak ?? 0}</strong>
+                        </div>
+                        <div className="member-detail">
+                          <span>Classes</span>
+                          <strong>{m.classesTotalAttended ?? 0}</strong>
+                        </div>
+                        <div className="member-detail">
+                          <span>Membership</span>
+                          <strong>{m.membershipStatus}</strong>
+                        </div>
+                        <div className="member-detail">
+                          <span>Days Left</span>
+                          <strong>{m.daysLeftInMembership ?? 0}</strong>
+                        </div>
+                        <div className="member-detail">
+                          <span>Next Due</span>
+                          <strong>{m.nextPaymentDue ? new Date(m.nextPaymentDue).toLocaleDateString() : "-"}</strong>
+                        </div>
+                        <div className="member-detail member-detail-wide">
+                          <span>QR Code</span>
+                          <code>{m.checkInQrCode || "-"}</code>
+                        </div>
+                        <div className="member-detail member-detail-wide">
+                          <span>Approval</span>
+                          <strong>{m.webAccessApprovedBy?.name ? `By ${m.webAccessApprovedBy.name}` : m.webAccessApproved ? "Approved" : "Pending"}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="member-record-actions">
                       <button
                         className="secondary-btn"
                         type="button"
@@ -254,30 +270,24 @@ export default function MembersPage() {
                           ? "Resending..."
                           : resendCooldownSeconds > 0
                           ? `Retry in ${resendCooldownSeconds}s`
-                          : "Resend"}
+                          : "Resend Invite"}
                       </button>
-                    </td>
-                    <td>
-                      {m.webAccessApproved ? (
-                        <span style={{ color: "var(--muted)" }}>
-                          {m.webAccessApprovedBy?.name ? `By ${m.webAccessApprovedBy.name}` : "Approved"}
-                        </span>
-                      ) : (
+                      {m.webAccessApproved ? null : (
                         <button
                           className="secondary-btn"
                           type="button"
                           onClick={() => approveWebAccess(m.id)}
                           disabled={isApproving}
                         >
-                          {isApproving ? "Approving..." : "Approve"}
+                          {isApproving ? "Approving..." : "Approve Web Access"}
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </article>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

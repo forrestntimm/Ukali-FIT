@@ -1,4 +1,4 @@
-import { PaymentMethod, PaymentState, PaymentStatus } from "@prisma/client";
+import { PaymentMethod, PaymentState, PaymentStatus, Role } from "@prisma/client";
 import Stripe from "stripe";
 import { prisma } from "../utils/prisma";
 import { getPaymentPlan, type PaymentPlan } from "./paymentPlans";
@@ -41,6 +41,8 @@ export async function markManualPayment(
     throw new Error("Unknown payment plan");
   }
 
+  await assertManualPaymentTarget(userId);
+
   const quantity = plan.quantityEnabled ? Math.max(1, input.quantity || 1) : 1;
   const paidAt = input.date || new Date();
   const amount = plan.amount * quantity;
@@ -59,6 +61,35 @@ export async function markManualPayment(
 
   await updateUserPaymentStatus(userId, PaymentMethod.CASH, plan, paidAt);
   return payment;
+}
+
+async function assertManualPaymentTarget(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      inviteAcceptedAt: true,
+      lastLoginAt: true
+    }
+  });
+
+  if (!user) {
+    const err = new Error("Athlete not found") as Error & { status?: number; code?: string };
+    err.status = 404;
+    err.code = "PAYMENT_MEMBER_NOT_FOUND";
+    throw err;
+  }
+
+  if (user.role !== Role.MEMBER || (!user.inviteAcceptedAt && !user.lastLoginAt)) {
+    const err = new Error("Payments can only be recorded for activated athlete profiles") as Error & {
+      status?: number;
+      code?: string;
+    };
+    err.status = 409;
+    err.code = "PAYMENT_TARGET_NOT_ACTIVE_MEMBER";
+    throw err;
+  }
 }
 
 export async function updateUserPaymentStatus(

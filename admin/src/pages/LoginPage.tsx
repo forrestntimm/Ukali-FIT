@@ -8,13 +8,34 @@ import { clearCachedAuthToken, setCachedAuthToken } from "../lib/authTokenCache"
 import BrandedSplash from "../components/BrandedSplash";
 
 type Mode = "magic" | "password" | "reset";
+const DEFAULT_LOGIN_MODE: Mode = "password";
+const REMEMBER_LOGIN_KEY = "admin_remember_login";
+const REMEMBERED_EMAIL_KEY = "admin_remembered_email";
+const REMEMBERED_MODE_KEY = "admin_remembered_mode";
+
+function readRememberedMode(): Mode {
+  if (typeof window === "undefined") return DEFAULT_LOGIN_MODE;
+  const storedMode = localStorage.getItem(REMEMBERED_MODE_KEY);
+  return storedMode === "password" ? storedMode : DEFAULT_LOGIN_MODE;
+}
+
+function readRememberedEmail() {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(REMEMBERED_EMAIL_KEY) || "";
+}
+
+function shouldRememberLogin() {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(REMEMBER_LOGIN_KEY) !== "false";
+}
 
 export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<Mode>("magic");
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<Mode>(() => readRememberedMode());
+  const [email, setEmail] = useState(() => readRememberedEmail());
   const [password, setPassword] = useState("");
+  const [rememberLogin, setRememberLogin] = useState(() => shouldRememberLogin());
   const [otpCode, setOtpCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,6 +63,20 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
     if (nextMode !== "reset") setResetCodeSent(false);
   };
 
+  const persistLoginPreference = (normalizedEmail: string) => {
+    if (typeof window === "undefined") return;
+
+    localStorage.setItem(REMEMBER_LOGIN_KEY, rememberLogin ? "true" : "false");
+    if (rememberLogin) {
+      localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
+      if (mode !== "reset") localStorage.setItem(REMEMBERED_MODE_KEY, mode);
+      return;
+    }
+
+    localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    localStorage.removeItem(REMEMBERED_MODE_KEY);
+  };
+
   const completeSupabaseLogin = async (session: Session) => {
     const token = session.access_token;
     const res = await api.post(
@@ -57,6 +92,7 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
     }
 
     setCachedAuthToken(token);
+    persistLoginPreference(session.user.email?.trim().toLowerCase() || email.trim().toLowerCase());
     onLogin();
     navigate("/");
   };
@@ -243,13 +279,6 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
 
         <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
           <button
-            className={mode === "magic" ? "primary-btn" : "secondary-btn"}
-            type="button"
-            onClick={() => resetStateForMode("magic")}
-          >
-            Magic Code
-          </button>
-          <button
             className={mode === "password" ? "primary-btn" : "secondary-btn"}
             type="button"
             onClick={() => resetStateForMode("password")}
@@ -262,6 +291,13 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
             onClick={() => resetStateForMode("reset")}
           >
             Set or Reset Password
+          </button>
+          <button
+            className={mode === "magic" ? "primary-btn" : "secondary-btn"}
+            type="button"
+            onClick={() => resetStateForMode("magic")}
+          >
+            Magic Code
           </button>
         </div>
 
@@ -305,6 +341,20 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
             </>
+          ) : null}
+
+          {mode !== "reset" ? (
+            <label className="remember-login">
+              <input
+                type="checkbox"
+                checked={rememberLogin}
+                onChange={(e) => setRememberLogin(e.target.checked)}
+              />
+              <span>
+                <strong>Keep me signed in</strong>
+                <small>Remember this email on this device. Passwords are never saved.</small>
+              </span>
+            </label>
           ) : null}
 
           {error ? <span style={{ color: "var(--danger)" }}>{error}</span> : null}

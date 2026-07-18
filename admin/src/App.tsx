@@ -1,12 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, Outlet, Navigate, useLocation } from "react-router-dom";
-import DashboardPage from "./pages/DashboardPage";
-import MembersPage from "./pages/MembersPage";
-import PaymentsPage from "./pages/PaymentsPage";
-import WodPage from "./pages/WodPage";
-import SchedulingPage from "./pages/SchedulingPage";
-import AnnouncementsPage from "./pages/AnnouncementsPage";
-import LoginPage from "./pages/LoginPage";
 import BrandedSplash from "./components/BrandedSplash";
 import { api } from "./api/client";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
@@ -14,41 +7,50 @@ import { Session } from "@supabase/supabase-js";
 import axios from "axios";
 import { shouldRouteToDashboardAfterAuth } from "./utils/auth-navigation";
 import { clearCachedAuthToken, primeCachedAuthTokenFromStorage, setCachedAuthToken } from "./lib/authTokenCache";
-import { isPageCacheFresh, readPageCache, writePageCache } from "./lib/pageCache";
+import {
+  warmAllAdminTabData,
+  warmAnnouncementsData,
+  warmDashboardData,
+  warmMembersData,
+  warmPaymentsData,
+  warmSchedulingData,
+  warmWorkoutsData
+} from "./lib/adminWarmups";
 
-const APP_TIME_ZONE = "Asia/Kathmandu";
-const SCHEDULING_CACHE_TTL_MS = 5 * 60 * 1000;
-const DASHBOARD_STATS_CACHE_KEY = "admin-dashboard-stats";
-const DASHBOARD_STATS_TTL_MS = 2 * 60 * 1000;
-const DATE_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-  timeZone: APP_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit"
-});
+const loadDashboardPage = () => import("./pages/DashboardPage");
+const loadMembersPage = () => import("./pages/MembersPage");
+const loadPaymentsPage = () => import("./pages/PaymentsPage");
+const loadWodPage = () => import("./pages/WodPage");
+const loadSchedulingPage = () => import("./pages/SchedulingPage");
+const loadAnnouncementsPage = () => import("./pages/AnnouncementsPage");
+const loadLoginPage = () => import("./pages/LoginPage");
+const DashboardPage = lazy(loadDashboardPage);
+const MembersPage = lazy(loadMembersPage);
+const PaymentsPage = lazy(loadPaymentsPage);
+const WodPage = lazy(loadWodPage);
+const SchedulingPage = lazy(loadSchedulingPage);
+const AnnouncementsPage = lazy(loadAnnouncementsPage);
+const LoginPage = lazy(loadLoginPage);
+const ADMIN_NAV_ITEMS = [
+  { to: "/", label: "Dashboard", preload: loadDashboardPage, warmData: warmDashboardData },
+  { to: "/members", label: "Members", preload: loadMembersPage, warmData: warmMembersData },
+  { to: "/payments", label: "Payments", preload: loadPaymentsPage, warmData: warmPaymentsData },
+  { to: "/wod", label: "WOD", preload: loadWodPage, warmData: warmWorkoutsData },
+  { to: "/scheduling", label: "Scheduling", preload: loadSchedulingPage, warmData: warmSchedulingData },
+  { to: "/announcements", label: "Announcements", preload: loadAnnouncementsPage, warmData: warmAnnouncementsData }
+];
 
-function getDateKeyInAppTimeZone(value: Date | string) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const parts = DATE_KEY_FORMATTER
-    .formatToParts(date)
-    .reduce<Record<string, string>>((acc, part) => {
-      if (part.type !== "literal") acc[part.type] = part.value;
-      return acc;
-    }, {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
+function preloadAdminTab(preload: () => Promise<unknown>, warmData: () => Promise<void>) {
+  void preload();
+  void warmData();
 }
 
-function shiftDateKey(dateKey: string, days: number) {
-  const base = new Date(`${dateKey}T00:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + days);
-  return base.toISOString().slice(0, 10);
-}
-
-function getWeekStartKey(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00Z`);
-  const dayOfWeek = date.getUTCDay();
-  const daysSinceMonday = (dayOfWeek + 6) % 7;
-  return shiftDateKey(dateKey, -daysSinceMonday);
+function RouteFallback() {
+  return (
+    <div className="page">
+      <p style={{ color: "var(--muted)" }}>Loading...</p>
+    </div>
+  );
 }
 
 function Layout({ onLogout }: { onLogout: () => void }) {
@@ -57,12 +59,17 @@ function Layout({ onLogout }: { onLogout: () => void }) {
       <aside className="sidebar">
         <div className="logo">Ukali Admin</div>
         <nav style={{ display: "grid", gap: 8 }}>
-          <NavLink className="nav-link" to="/">Dashboard</NavLink>
-          <NavLink className="nav-link" to="/members">Members</NavLink>
-          <NavLink className="nav-link" to="/payments">Payments</NavLink>
-          <NavLink className="nav-link" to="/wod">WOD</NavLink>
-          <NavLink className="nav-link" to="/scheduling">Scheduling</NavLink>
-          <NavLink className="nav-link" to="/announcements">Announcements</NavLink>
+          {ADMIN_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              className="nav-link"
+              to={item.to}
+              onFocus={() => preloadAdminTab(item.preload, item.warmData)}
+              onMouseEnter={() => preloadAdminTab(item.preload, item.warmData)}
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
         <button className="secondary-btn" onClick={onLogout}>Sign Out</button>
       </aside>
@@ -199,50 +206,9 @@ VITE_ADMIN_CALLBACK_URL
     if (!authed) return;
 
     let cancelled = false;
-    const todayKey = getDateKeyInAppTimeZone(new Date());
-    const weekStartKey = getWeekStartKey(todayKey);
-    const weekEndKey = shiftDateKey(weekStartKey, 4);
-    const scheduleCacheKey = `scheduling:${weekStartKey}:${weekEndKey}`;
-    const cachedStats = readPageCache<unknown>(DASHBOARD_STATS_CACHE_KEY);
-    const cachedCoaches = readPageCache<unknown[]>("admin-coaches");
-    const cachedSchedule = readPageCache<unknown[]>(scheduleCacheKey);
-
-    const warmDashboard =
-      cachedStats && isPageCacheFresh(cachedStats.savedAt, DASHBOARD_STATS_TTL_MS)
-        ? Promise.resolve()
-        : api
-            .get("/users/stats")
-            .then((res) => {
-              if (!cancelled) writePageCache(DASHBOARD_STATS_CACHE_KEY, res.data);
-            })
-            .catch(() => {});
-
-    const warmCoaches =
-      cachedCoaches && isPageCacheFresh(cachedCoaches.savedAt, SCHEDULING_CACHE_TTL_MS)
-        ? Promise.resolve()
-        : api
-            .get("/users/coaches")
-            .then((res) => {
-              if (!cancelled) writePageCache("admin-coaches", res.data);
-            })
-            .catch(() => {});
-
-    const warmSchedule =
-      cachedSchedule && isPageCacheFresh(cachedSchedule.savedAt, SCHEDULING_CACHE_TTL_MS)
-        ? Promise.resolve()
-        : api
-            .get("/scheduling/classes", {
-              params: {
-                from: `${weekStartKey}T00:00:00.000Z`,
-                to: `${weekEndKey}T23:59:59.999Z`
-              }
-            })
-            .then((res) => {
-              if (!cancelled) writePageCache(scheduleCacheKey, res.data);
-            })
-            .catch(() => {});
-
-    void Promise.all([warmDashboard, warmCoaches, warmSchedule]);
+    void warmAllAdminTabData({
+      shouldWrite: () => !cancelled
+    });
 
     return () => {
       cancelled = true;
@@ -261,30 +227,32 @@ VITE_ADMIN_CALLBACK_URL
   }
 
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={authed ? <Navigate to="/" replace /> : <LoginPage onLogin={() => setAuthed(true)} />}
-      />
-      <Route
-        path="/auth/callback"
-        element={authed ? <Navigate to="/" replace /> : <LoginPage onLogin={() => setAuthed(true)} />}
-      />
-      {authed ? (
-        <Route path="/" element={<Layout onLogout={handleLogout} />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="members" element={<MembersPage />} />
-          <Route path="payments" element={<PaymentsPage />} />
-          <Route path="wod" element={<WodPage />} />
-          <Route path="scheduling" element={<SchedulingPage />} />
-          <Route path="classes" element={<Navigate to="/scheduling" replace />} />
-          <Route path="coaching-schedule" element={<Navigate to="/scheduling" replace />} />
-          <Route path="announcements" element={<AnnouncementsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      ) : (
-        <Route path="*" element={<LoginPage onLogin={() => setAuthed(true)} />} />
-      )}
-    </Routes>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route
+          path="/login"
+          element={authed ? <Navigate to="/" replace /> : <LoginPage onLogin={() => setAuthed(true)} />}
+        />
+        <Route
+          path="/auth/callback"
+          element={authed ? <Navigate to="/" replace /> : <LoginPage onLogin={() => setAuthed(true)} />}
+        />
+        {authed ? (
+          <Route path="/" element={<Layout onLogout={handleLogout} />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="members" element={<MembersPage />} />
+            <Route path="payments" element={<PaymentsPage />} />
+            <Route path="wod" element={<WodPage />} />
+            <Route path="scheduling" element={<SchedulingPage />} />
+            <Route path="classes" element={<Navigate to="/scheduling" replace />} />
+            <Route path="coaching-schedule" element={<Navigate to="/scheduling" replace />} />
+            <Route path="announcements" element={<AnnouncementsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        ) : (
+          <Route path="*" element={<LoginPage onLogin={() => setAuthed(true)} />} />
+        )}
+      </Routes>
+    </Suspense>
   );
 }

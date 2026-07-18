@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
 import { useAuth } from "../context/AuthContext";
+import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
 import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 import { formatDateTimeInAppTimeZone, toDayKeyInAppTimeZone } from "../utils/timezone";
@@ -69,15 +70,18 @@ type ClassSignupItem = {
   };
 };
 
+type AdminScanCacheEnvelope = {
+  classes: ClassItem[];
+  selectedClassId: string;
+  classRoster: ClassSignupItem[];
+  savedAt: number;
+};
+
 export default function AdminScanScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = Camera.useCameraPermissions();
-  const initialCached = peekScreenCache<{
-    classes: ClassItem[];
-    selectedClassId: string;
-    classRoster: ClassSignupItem[];
-  }>("admin-scan");
+  const initialCached = peekScreenCache<AdminScanCacheEnvelope>("admin-scan");
   const [classes, setClasses] = useState<ClassItem[]>(initialCached?.classes || []);
   const [selectedClassId, setSelectedClassId] = useState<string>(initialCached?.selectedClassId || "");
   const [loadingClasses, setLoadingClasses] = useState(false);
@@ -99,20 +103,6 @@ export default function AdminScanScreen() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      const cached = await readScreenCache<{
-        classes: ClassItem[];
-        selectedClassId: string;
-        classRoster: ClassSignupItem[];
-      }>("admin-scan");
-      if (!cached) return;
-      setClasses(cached.classes || []);
-      setSelectedClassId(cached.selectedClassId || "");
-      setClassRoster(cached.classRoster || []);
-    })();
-  }, []);
-
   const loadClassRoster = useCallback(async (classId: string) => {
     if (!classId) {
       setClassRoster([]);
@@ -124,10 +114,11 @@ export default function AdminScanScreen() {
       const res = await api.get(`/classes/${classId}/signups`);
       const roster = res.data as ClassSignupItem[];
       setClassRoster(roster);
-      await writeScreenCache("admin-scan", {
+      await writeScreenCache<AdminScanCacheEnvelope>("admin-scan", {
         classes,
         selectedClassId: classId,
-        classRoster: roster
+        classRoster: roster,
+        savedAt: Date.now()
       });
       if (selectedRosterUserId && !roster.some((signup) => signup.user?.id === selectedRosterUserId)) {
         setSelectedRosterUserId("");
@@ -153,21 +144,31 @@ export default function AdminScanScreen() {
         : options[0]?.id || "";
       setSelectedClassId(nextSelectedClassId);
       await loadClassRoster(nextSelectedClassId);
-      await writeScreenCache("admin-scan", {
+      await writeScreenCache<AdminScanCacheEnvelope>("admin-scan", {
         classes: options,
         selectedClassId: nextSelectedClassId,
-        classRoster
+        classRoster,
+        savedAt: Date.now()
       });
     } finally {
       setLoadingClasses(false);
     }
   }, [loadClassRoster, selectedClassId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadClasses();
-    }, [loadClasses])
-  );
+  const { seedLoadedAt } = useStaleFocusRefresh(loadClasses, 5 * 60 * 1000);
+
+  useEffect(() => {
+    void (async () => {
+      const cached = await readScreenCache<AdminScanCacheEnvelope>("admin-scan");
+      if (!cached) return;
+      setClasses(cached.classes || []);
+      setSelectedClassId(cached.selectedClassId || "");
+      setClassRoster(cached.classRoster || []);
+      if (cached.savedAt) {
+        seedLoadedAt(cached.savedAt);
+      }
+    })();
+  }, [seedLoadedAt]);
 
   useFocusEffect(
     useCallback(() => {

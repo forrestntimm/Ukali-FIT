@@ -170,6 +170,38 @@ input, select, textarea {
   backdrop-filter: blur(12px);
 }
 
+.remember-login {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #24314f;
+  border-radius: 12px;
+  background: rgba(20, 28, 51, 0.58);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.remember-login input {
+  margin-top: 3px;
+  accent-color: var(--primary);
+}
+
+.remember-login span {
+  display: grid;
+  gap: 3px;
+}
+
+.remember-login strong {
+  font-size: 14px;
+}
+
+.remember-login small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .grid {
   display: grid;
   gap: 16px;
@@ -180,7 +212,109 @@ input, select, textarea {
 }
 
 .grid-members {
-  grid-template-columns: minmax(320px, 3fr) minmax(520px, 5fr);
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.member-invite-card {
+  max-width: none;
+}
+
+.member-invite-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.member-invite-form > span {
+  grid-column: 1 / -1;
+}
+
+.members-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.member-record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #24314f;
+  border-radius: 12px;
+  background: rgba(20, 28, 51, 0.58);
+}
+
+.member-record-main {
+  min-width: 0;
+}
+
+.member-record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.member-record-name {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.member-record-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.member-record-badges,
+.member-record-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.member-record-badges {
+  justify-content: flex-end;
+}
+
+.member-record-actions {
+  align-content: start;
+  justify-content: flex-end;
+}
+
+.member-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.member-detail {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(10, 15, 31, 0.42);
+}
+
+.member-detail span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.member-detail strong,
+.member-detail code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.member-detail-wide {
+  grid-column: span 2;
 }
 
 .grid-wod {
@@ -228,6 +362,20 @@ input, select, textarea {
 
 .schedule-empty-cell {
   background: rgba(148, 163, 184, 0.14);
+}
+
+.schedule-empty-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 18px;
+}
+
+.schedule-coach-select {
+  width: 100%;
+  min-width: 150px;
+  min-height: 42px;
+  color: var(--text);
 }
 
 .schedule-coach-cell {
@@ -365,6 +513,20 @@ input, select, textarea {
 
   .grid-members {
     grid-template-columns: 1fr;
+  }
+
+  .member-record {
+    grid-template-columns: 1fr;
+  }
+
+  .member-record-header,
+  .member-record-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .member-detail-wide {
+    grid-column: span 1;
   }
 
   .grid-wod {

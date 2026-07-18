@@ -63,7 +63,12 @@ test("dashboard stats only count activated athletes", () => {
 
   assert.match(
     source,
-    /const athletes = filterRealAthleteProfiles\(users\)/,
-    "dashboard should filter out invite-only athletes before calculating counts"
+    /api\.get\("\/users\/stats"\)/,
+    "dashboard should use the backend stats endpoint that filters activated athletes before counting"
+  );
+  assert.doesNotMatch(
+    source,
+    /api\.get\("\/users"\)/,
+    "dashboard should not fetch the full users index to calculate counts client-side"
   );
 });

@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
 import { useAuth } from "../context/AuthContext";
+import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
 import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 import { formatDateTimeInAppTimeZone } from "../utils/timezone";
@@ -70,45 +71,6 @@ export default function AdminPaymentsManageScreen() {
   const normalizedQuantity = selectedPlan?.quantityEnabled ? Math.max(1, Number(quantity) || 1) : 1;
   const totalAmount = selectedPlan ? selectedPlan.amount * normalizedQuantity : 0;
 
-  React.useEffect(() => {
-    void (async () => {
-      const cached = await readScreenCache<AdminPaymentsCacheEnvelope>("admin-payments");
-      if (!cached) return;
-      if (cached.members?.length) {
-        setMembers(cached.members);
-      }
-      if (cached.plans?.length) {
-        setPlans(cached.plans);
-        setPlanCode((current) => current || cached.plans[0]?.code || "");
-      }
-    })();
-  }, []);
-
-  const loadUsers = useCallback(async () => {
-    const res = await api.get("/users/member-options");
-    const athleteMembers = (res.data as MemberOption[])
-      .filter((member) => member.role === "MEMBER")
-      .sort((a, b) => a.name.localeCompare(b.name));
-    setMembers(athleteMembers);
-    await writeScreenCache<AdminPaymentsCacheEnvelope>("admin-payments", {
-      members: athleteMembers,
-      plans,
-      savedAt: Date.now()
-    });
-  }, []);
-
-  const loadPlans = useCallback(async () => {
-    const res = await api.get("/payments/plans");
-    const paymentPlans = res.data as PaymentPlan[];
-    setPlans(paymentPlans);
-    setPlanCode((current) => current || paymentPlans[0]?.code || "");
-    await writeScreenCache<AdminPaymentsCacheEnvelope>("admin-payments", {
-      members,
-      plans: paymentPlans,
-      savedAt: Date.now()
-    });
-  }, [members]);
-
   const loadPayments = useCallback(async (userId: string) => {
     if (!userId) {
       setPayments([]);
@@ -123,37 +85,67 @@ export default function AdminPaymentsManageScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (authLoading || user?.role !== "ADMIN") {
-        return;
+  const loadPaymentOptions = useCallback(async () => {
+    if (authLoading || user?.role !== "ADMIN") return;
+
+    const [usersResult, plansResult] = await Promise.allSettled([
+      api.get("/users/member-options"),
+      api.get("/payments/plans")
+    ]);
+
+    let nextMembers = members;
+    let nextPlans = plans;
+    let nextError: string | null = null;
+
+    if (usersResult.status === "fulfilled") {
+      nextMembers = (usersResult.value.data as MemberOption[])
+        .filter((member) => member.role === "MEMBER")
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setMembers(nextMembers);
+    } else {
+      nextError = usersResult.reason?.response?.data?.message || "Could not load athletes.";
+    }
+
+    if (plansResult.status === "fulfilled") {
+      nextPlans = plansResult.value.data as PaymentPlan[];
+      setPlans(nextPlans);
+      setPlanCode((current) => current || nextPlans[0]?.code || "");
+    } else {
+      nextError = plansResult.reason?.response?.data?.message || "Could not load payment options.";
+    }
+
+    if (usersResult.status === "fulfilled" || plansResult.status === "fulfilled") {
+      await writeScreenCache<AdminPaymentsCacheEnvelope>("admin-payments", {
+        members: nextMembers,
+        plans: nextPlans,
+        savedAt: Date.now()
+      });
+    }
+
+    if (selectedUserId) {
+      await loadPayments(selectedUserId);
+    }
+    setErrorMessage(nextError);
+  }, [authLoading, loadPayments, members, plans, selectedUserId, user?.role]);
+
+  const { seedLoadedAt } = useStaleFocusRefresh(loadPaymentOptions, 5 * 60 * 1000);
+
+  React.useEffect(() => {
+    void (async () => {
+      const cached = await readScreenCache<AdminPaymentsCacheEnvelope>("admin-payments");
+      if (!cached) return;
+      if (cached.members?.length) {
+        setMembers(cached.members);
       }
-
-      let cancelled = false;
-
-      const load = async () => {
-        try {
-          await Promise.all([loadUsers(), loadPlans()]);
-          if (!cancelled && selectedUserId) {
-            await loadPayments(selectedUserId);
-          }
-          if (!cancelled) {
-            setErrorMessage(null);
-          }
-        } catch (err: any) {
-          if (!cancelled) {
-            setErrorMessage(err?.response?.data?.message || "Could not load payment options.");
-          }
-        }
-      };
-
-      void load();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [authLoading, loadPayments, loadPlans, loadUsers, selectedUserId, user?.role])
-  );
+      if (cached.plans?.length) {
+        setPlans(cached.plans);
+        setPlanCode((current) => current || cached.plans[0]?.code || "");
+      }
+      if (cached.savedAt) {
+        seedLoadedAt(cached.savedAt);
+      }
+    })();
+  }, [seedLoadedAt]);
 
   const selectMember = (userId: string) => {
     setSelectedUserId(userId);
@@ -197,6 +189,11 @@ export default function AdminPaymentsManageScreen() {
         .sort((a, b) => a.name.localeCompare(b.name));
       setMembers(athleteMembers);
       setPayments(paymentsRes.data);
+      await writeScreenCache<AdminPaymentsCacheEnvelope>("admin-payments", {
+        members: athleteMembers,
+        plans,
+        savedAt: Date.now()
+      });
       setStatusMessage(`Payment recorded for ${selectedMember?.name || "athlete"}.`);
     } catch (err: any) {
       setErrorMessage(err?.response?.data?.message || "Could not record payment.");

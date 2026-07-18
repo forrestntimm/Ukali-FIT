@@ -17,6 +17,11 @@ const pageCacheSource = fs.readFileSync(
   "utf8"
 );
 
+const adminWarmupsSource = fs.readFileSync(
+  "/Users/forresttimm/Documents/Ukali sign in app/admin/src/lib/adminWarmups.ts",
+  "utf8"
+);
+
 const dashboardSource = fs.readFileSync(
   "/Users/forresttimm/Documents/Ukali sign in app/admin/src/pages/DashboardPage.tsx",
   "utf8"
@@ -67,11 +72,25 @@ test("admin page cache keeps a warm in-memory copy for instant same-session read
   assert.match(pageCacheSource, /memoryCache\.get\(key\)/, "reads should check the in-memory cache first");
 });
 
-test("admin app prefetches dashboard and scheduling data after auth", () => {
-  assert.match(appSource, /api\s*\.\s*get\("\/users\/stats"\)/, "app should warm dashboard stats after auth");
-  assert.match(appSource, /api\s*\.\s*get\("\/users\/coaches"\)/, "app should warm coaches after auth");
-  assert.match(appSource, /api\s*\.\s*get\("\/scheduling\/classes"/, "app should warm the current scheduling week after auth");
-  assert.match(appSource, /writePageCache\("admin-coaches"/, "app should write warm coach data into shared cache");
+test("admin app warms every tab after auth", () => {
+  assert.match(appSource, /warmAllAdminTabData/, "app should warm every admin tab after auth");
+  assert.match(adminWarmupsSource, /api\.get\("\/users\/stats"\)/, "warmups should fetch dashboard stats");
+  assert.match(adminWarmupsSource, /api\.get\("\/users"\)/, "warmups should fetch full members data");
+  assert.match(adminWarmupsSource, /api\.get\("\/users\/member-options"\)/, "warmups should fetch payment athlete options");
+  assert.match(adminWarmupsSource, /api\.get\("\/payments\/plans"\)/, "warmups should fetch payment plans");
+  assert.match(adminWarmupsSource, /api\.get\("\/users\/coaches"\)/, "warmups should fetch coaches");
+  assert.match(adminWarmupsSource, /api\.get\("\/scheduling\/classes"/, "warmups should fetch the current scheduling week");
+  assert.match(adminWarmupsSource, /api\.get\("\/workouts"\)/, "warmups should fetch WOD data");
+  assert.match(adminWarmupsSource, /api\.get\("\/announcements"\)/, "warmups should fetch announcements data");
+});
+
+test("admin app lazy-loads route pages and preloads chunks from navigation intent", () => {
+  assert.match(appSource, /lazy\(loadDashboardPage\)/, "dashboard page should be route-split");
+  assert.match(appSource, /lazy\(loadMembersPage\)/, "members page should be route-split");
+  assert.match(appSource, /lazy\(loadPaymentsPage\)/, "payments page should be route-split");
+  assert.match(appSource, /ADMIN_NAV_ITEMS/, "navigation should use a single preloadable route registry");
+  assert.match(appSource, /onMouseEnter=\{\(\) => preloadAdminTab\(item\.preload, item\.warmData\)\}/, "nav hover should preload page chunks and data");
+  assert.match(appSource, /onFocus=\{\(\) => preloadAdminTab\(item\.preload, item\.warmData\)\}/, "keyboard focus should preload page chunks and data");
 });
 
 test("dashboard page restores cached stats before refreshing", () => {
@@ -92,11 +111,13 @@ test("dashboard page restores cached stats before refreshing", () => {
 test("members page restores cached member list before refreshing", () => {
   assert.match(membersSource, /readPageCache/, "members page should restore warm cache");
   assert.match(membersSource, /writePageCache/, "members page should persist warm cache");
+  assert.match(membersSource, /ADMIN_MEMBERS_CACHE_KEY/, "members page should use the full members cache key");
 });
 
 test("payments page restores cached member and plan data before refreshing", () => {
   assert.match(paymentsSource, /readPageCache/, "payments page should restore warm cache");
   assert.match(paymentsSource, /writePageCache/, "payments page should persist warm cache");
+  assert.match(paymentsSource, /MEMBER_OPTIONS_CACHE_KEY/, "payments page should use the lightweight member-options cache key");
   assert.match(
     paymentsSource,
     /api\.get\("\/users\/member-options"\)/,
@@ -123,6 +144,29 @@ test("scheduling page restores cached weekly schedule before refreshing", () => 
     schedulingSource,
     /decorateScheduleItems/,
     "scheduling page should precompute schedule time metadata instead of reformatting every cell on render"
+  );
+  assert.match(schedulingSource, /SCHEDULE_START_HOUR = 6/, "scheduling page should start the hourly grid at 6 AM");
+  assert.match(schedulingSource, /SCHEDULE_END_HOUR = 17/, "scheduling page should include the 5 PM hourly slot");
+  assert.match(schedulingSource, /HOURLY_TIME_KEYS/, "scheduling page should render default hourly slots for empty weeks");
+  assert.match(
+    schedulingSource,
+    /createScheduleSlotAssignment/,
+    "scheduling page should save coach assignments from open hourly slots"
+  );
+  assert.match(
+    schedulingSource,
+    /api\.post<ScheduleItem>\("\/scheduling\/classes"/,
+    "scheduling page should create schedule entries through the scheduling API"
+  );
+  assert.match(
+    schedulingSource,
+    /className="schedule-coach-select"/,
+    "scheduling page should render coach dropdowns inside editable schedule cells"
+  );
+  assert.doesNotMatch(
+    schedulingSource,
+    /No classes found for this week/,
+    "scheduling page should show an hourly grid instead of hiding empty weeks"
   );
 });
 

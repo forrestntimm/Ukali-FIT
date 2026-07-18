@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
 import { useAuth } from "../context/AuthContext";
 import { IS_COACH_APP } from "../config/appVariant";
+import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
 import { syncRegisteredPushToken } from "../lib/pushNotifications";
 import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { shadow, theme } from "../theme";
@@ -122,6 +123,33 @@ export default function ProfileScreen() {
   const [coachSchedule, setCoachSchedule] = useState<CoachClassAssignment[]>(initialCoachCache?.coachSchedule || []);
   const [loadingCoachSchedule, setLoadingCoachSchedule] = useState(false);
 
+  const loadCoachProfile = useCallback(async () => {
+    if (!shouldShowCoachSections || !user) return;
+
+    setLoadingCoachStats((current) => current || classesCoached === 0);
+    setLoadingCoachSchedule((current) => current || coachSchedule.length === 0);
+    try {
+      const [statsRes, scheduleRes] = await Promise.all([
+        api.get("/users/me/coach-stats"),
+        api.get("/classes", { params: { mine: "true", summary: "true", limit: "20" } })
+      ]);
+      const nextClassesCoached = Number(statsRes.data?.classesCoached || 0);
+      const assignments = (scheduleRes.data as CoachClassAssignment[]).filter((item) => item.status !== "CANCELED");
+      setClassesCoached(nextClassesCoached);
+      setCoachSchedule(assignments);
+      await writeScreenCache<AdminProfileCacheEnvelope>("admin-profile", {
+        classesCoached: nextClassesCoached,
+        coachSchedule: assignments,
+        savedAt: Date.now()
+      });
+    } finally {
+      setLoadingCoachStats(false);
+      setLoadingCoachSchedule(false);
+    }
+  }, [classesCoached, coachSchedule.length, shouldShowCoachSections, user]);
+
+  const { seedLoadedAt } = useStaleFocusRefresh(loadCoachProfile, 5 * 60 * 1000);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -155,33 +183,11 @@ export default function ProfileScreen() {
       if (!cached) return;
       setClassesCoached(cached.classesCoached || 0);
       setCoachSchedule(cached.coachSchedule || []);
-    })();
-
-    void (async () => {
-      setLoadingCoachStats(true);
-      setLoadingCoachSchedule(true);
-      try {
-        const [statsRes, scheduleRes] = await Promise.all([
-          api.get("/users/me/coach-stats"),
-          api.get("/classes", { params: { mine: "true", summary: "true", limit: "20" } })
-        ]);
-        setClassesCoached(Number(statsRes.data?.classesCoached || 0));
-        const assignments = (scheduleRes.data as CoachClassAssignment[]).filter((item) => item.status !== "CANCELED");
-        setCoachSchedule(assignments);
-        await writeScreenCache<AdminProfileCacheEnvelope>("admin-profile", {
-          classesCoached: Number(statsRes.data?.classesCoached || 0),
-          coachSchedule: assignments,
-          savedAt: Date.now()
-        });
-      } catch {
-        setClassesCoached(0);
-        setCoachSchedule([]);
-      } finally {
-        setLoadingCoachStats(false);
-        setLoadingCoachSchedule(false);
+      if (cached.savedAt) {
+        seedLoadedAt(cached.savedAt);
       }
     })();
-  }, [shouldShowCoachSections, user?.id]);
+  }, [seedLoadedAt, shouldShowCoachSections, user]);
 
   const openEditor = (editor: Exclude<ActiveEditor, null>) => {
     setStatusMessage(null);

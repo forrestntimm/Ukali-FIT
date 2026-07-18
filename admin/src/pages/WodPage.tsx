@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
+import { WORKOUTS_CACHE_KEY, WORKOUTS_CACHE_TTL_MS } from "../lib/adminWarmups";
 
 const APP_TIME_ZONE = "Asia/Kathmandu";
-const WORKOUTS_CACHE_KEY = "workouts-list";
-const WORKOUTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type WorkoutRecord = {
   id: string;

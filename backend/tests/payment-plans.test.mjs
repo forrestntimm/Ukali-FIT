@@ -41,6 +41,18 @@ test('manual payment service stores the chosen plan metadata on the payment reco
   assert.match(source, /quantity/, 'manual payment service should store payment quantity');
 });
 
+test('manual payment service only records payments for activated athlete profiles', () => {
+  const source = fs.readFileSync(paymentServicePath, 'utf8');
+  const routeSource = fs.readFileSync(paymentRoutesPath, 'utf8');
+
+  assert.match(source, /Role\s*}/, 'payment service should import Role for target validation');
+  assert.match(source, /assertManualPaymentTarget\(userId\)/, 'manual payments should validate the target user before creating a payment');
+  assert.match(source, /role:\s*true,[\s\S]*inviteAcceptedAt:\s*true,[\s\S]*lastLoginAt:\s*true/s, 'target validation should load role and activation fields');
+  assert.match(source, /user\.role !== Role\.MEMBER/, 'target validation should reject non-athlete accounts');
+  assert.match(source, /!user\.inviteAcceptedAt && !user\.lastLoginAt/, 'target validation should reject placeholder athletes that never accepted or logged in');
+  assert.match(routeSource, /PAYMENT_MANUAL_FAILED/, 'manual payment route should return a structured error for service rejections');
+});
+
 test('payment schema stores plan metadata for history and reporting', () => {
   const source = fs.readFileSync(schemaPath, 'utf8');
 
@@ -55,6 +67,22 @@ test('upcoming classes query keeps signup payload lean for mobile schedule scree
 
   assert.doesNotMatch(listUpcomingClassesSource, /signups:\s*true/, 'class list queries should not include full signup records');
   assert.match(listUpcomingClassesSource, /signups:\s*{\s*select:\s*{\s*id:\s*true,\s*userId:\s*true,\s*checkedInAt:\s*true/s, 'class list queries should select only the signup fields the apps need');
+});
+
+test('upcoming class coach filter includes primary and secondary assignments', () => {
+  const source = fs.readFileSync(classServicePath, 'utf8');
+  const listUpcomingClassesSource = source.match(/export async function listUpcomingClasses\([\s\S]*?\n}\n/)?.[0] ?? '';
+
+  assert.match(
+    listUpcomingClassesSource,
+    /coachAssignmentWhere\s*=\s*coachId\s*\?\s*{\s*OR:\s*\[\s*{\s*coachId\s*},\s*{\s*secondaryCoachId:\s*coachId\s*}\s*]\s*}/s,
+    'full upcoming class queries should include secondary coach assignments when filtering by coach'
+  );
+  assert.doesNotMatch(
+    listUpcomingClassesSource,
+    /coachId:\s*coachId \|\| undefined/,
+    'full upcoming class queries should not filter only by primary coach'
+  );
 });
 
 test('backend exposes a lightweight coaches-only list for scheduling', () => {
@@ -76,6 +104,23 @@ test('scheduling route uses a lightweight scheduling classes query', () => {
   assert.match(serviceSource, /export async function listSchedulingClasses\(/, 'class service should expose a lightweight scheduling query');
   assert.doesNotMatch(schedulingQuerySource, /signups:/, 'scheduling query should not include signup payloads');
   assert.match(routeSource, /listSchedulingClasses/, 'scheduling route should use the dedicated lightweight query');
+});
+
+test('scheduling route can create editable coach slots from the admin grid', () => {
+  const serviceSource = fs.readFileSync(classServicePath, 'utf8');
+  const routeSource = fs.readFileSync(schedulingRoutesPath, 'utf8');
+  const schedulingQuerySource = serviceSource.match(/export async function listSchedulingClasses\([\s\S]*?\n}\n/)?.[0] ?? '';
+
+  assert.match(routeSource, /router\.post\("\/classes"/, 'scheduling route should let admins save open schedule slots');
+  assert.match(routeSource, /upsertSchedulingClass/, 'scheduling route should persist coach slot assignments');
+  assert.match(serviceSource, /export async function upsertSchedulingClass\(/, 'class service should expose scheduling upsert logic');
+  assert.match(serviceSource, /assertOptionalCoachExists\(input\.primaryCoachId\)/, 'scheduling upsert should validate primary admin coaches');
+  assert.match(serviceSource, /assertOptionalCoachExists\(input\.secondaryCoachId\)/, 'scheduling upsert should validate secondary admin coaches');
+  assert.doesNotMatch(
+    schedulingQuerySource,
+    /removeBlockedClassTimes/,
+    'admin scheduling view should keep the explicit 5 PM slot visible'
+  );
 });
 
 test('check-in QR codes are persisted per user and scanner accepts the stable prefixed payload', () => {

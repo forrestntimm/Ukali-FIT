@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { isPageCacheFresh, readPageCache, writePageCache } from "../lib/pageCache";
+import { ANNOUNCEMENTS_CACHE_KEY, ANNOUNCEMENTS_CACHE_TTL_MS } from "../lib/adminWarmups";
 
 type Announcement = {
   id: string;
@@ -9,9 +10,6 @@ type Announcement = {
   imageUrl?: string | null;
   createdAt: string;
 };
-
-const ANNOUNCEMENTS_CACHE_KEY = "announcements-list";
-const ANNOUNCEMENTS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export default function AnnouncementsPage() {
   const [list, setList] = useState<Announcement[]>([]);

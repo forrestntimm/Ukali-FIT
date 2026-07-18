@@ -4,37 +4,68 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 import TabWallpaper from "../components/TabWallpaper";
 import { useStaleFocusRefresh } from "../hooks/useStaleFocusRefresh";
-import { readScreenCache, writeScreenCache } from "../lib/screenCache";
+import { peekScreenCache, readScreenCache, writeScreenCache } from "../lib/screenCache";
 import { theme, shadow } from "../theme";
 import { formatDateInAppTimeZone } from "../utils/timezone";
 
+type AnnouncementItem = {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl?: string | null;
+  createdAt: string;
+};
+
+type AnnouncementsCacheEnvelope = {
+  announcements: AnnouncementItem[];
+  savedAt: number;
+};
+
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const initialCached = peekScreenCache<AnnouncementItem[] | AnnouncementsCacheEnvelope>("announcements");
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
+    Array.isArray(initialCached) ? initialCached : initialCached?.announcements || []
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const cached = await readScreenCache<any[]>("announcements");
-      if (cached?.length) {
-        setAnnouncements(cached);
-      }
-    })();
-  }, []);
 
   const loadAnnouncements = useCallback(async () => {
     try {
       const res = await api.get("/announcements");
       setAnnouncements(res.data);
-      await writeScreenCache("announcements", res.data);
+      await writeScreenCache<AnnouncementsCacheEnvelope>("announcements", {
+        announcements: res.data,
+        savedAt: Date.now()
+      });
       setErrorMessage(null);
     } catch (err: any) {
       setErrorMessage(err?.response?.data?.message || "Could not load announcements.");
     }
   }, []);
 
-  const { refreshNow } = useStaleFocusRefresh(loadAnnouncements, 30000);
+  const { refreshNow, seedLoadedAt } = useStaleFocusRefresh(loadAnnouncements, 5 * 60 * 1000);
+
+  useEffect(() => {
+    void (async () => {
+      const cached = await readScreenCache<AnnouncementItem[] | AnnouncementsCacheEnvelope>("announcements");
+      if (!cached) return;
+
+      if (Array.isArray(cached)) {
+        if (cached.length) {
+          setAnnouncements(cached);
+        }
+        return;
+      }
+
+      if (cached.announcements?.length) {
+        setAnnouncements(cached.announcements);
+      }
+      if (cached.savedAt) {
+        seedLoadedAt(cached.savedAt);
+      }
+    })();
+  }, [seedLoadedAt]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

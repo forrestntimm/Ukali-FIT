@@ -44,13 +44,20 @@ router.get("/plans", requireAuth, async (_req, res) => {
 });
 
 router.post("/manual", requireAuth, requireRole("ADMIN"), validate(manualSchema), async (req, res) => {
-  const { userId, planCode, quantity, date } = req.body;
-  const payment = await markManualPayment(userId, {
-    planCode,
-    quantity,
-    date: date ? new Date(date) : undefined
-  });
-  return res.status(201).json(payment);
+  try {
+    const { userId, planCode, quantity, date } = req.body;
+    const payment = await markManualPayment(userId, {
+      planCode,
+      quantity,
+      date: date ? new Date(date) : undefined
+    });
+    return res.status(201).json(payment);
+  } catch (err: any) {
+    return res.status(err?.status || 400).json({
+      code: err?.code || "PAYMENT_MANUAL_FAILED",
+      message: err?.message || "Failed to record payment"
+    });
+  }
 });
 
 router.get("/me", requireAuth, async (req, res) => {

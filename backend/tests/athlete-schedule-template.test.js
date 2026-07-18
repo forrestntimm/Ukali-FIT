@@ -27,6 +27,7 @@ test("athlete weekly schedule matches the current client class template", () => 
     { weekday: 3, time: "10:30", title: "Open Gym", capacity: 20 },
     { weekday: 3, time: "16:00", title: "Regular Class", capacity: 20 },
     { weekday: 4, time: "06:00", title: "Regular Class", capacity: 20 },
+    { weekday: 4, time: "09:30", title: "Women's Class", capacity: 20 },
     { weekday: 4, time: "10:30", title: "Open Gym", capacity: 20 },
     { weekday: 4, time: "16:00", title: "Regular Class", capacity: 20 },
     { weekday: 5, time: "06:00", title: "Regular Class", capacity: 20 },
@@ -46,7 +47,7 @@ test("generateAthleteSchedule includes weekdays with date labels and no weekend 
     endDateKey: "2026-07-24"
   });
 
-  assert.equal(schedule.length, 16);
+  assert.equal(schedule.length, 17);
   assert.deepEqual(
     schedule.map((klass) => `${klass.weekdayLabel} ${klass.dateKey} ${klass.time} ${klass.title}`),
     [
@@ -61,6 +62,7 @@ test("generateAthleteSchedule includes weekdays with date labels and no weekend 
       "Wednesday 2026-07-22 10:30 Open Gym",
       "Wednesday 2026-07-22 16:00 Regular Class",
       "Thursday 2026-07-23 06:00 Regular Class",
+      "Thursday 2026-07-23 09:30 Women's Class",
       "Thursday 2026-07-23 10:30 Open Gym",
       "Thursday 2026-07-23 16:00 Regular Class",
       "Friday 2026-07-24 06:00 Regular Class",

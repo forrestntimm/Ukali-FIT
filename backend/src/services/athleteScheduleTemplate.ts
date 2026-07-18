@@ -25,6 +25,7 @@ export const ATHLETE_WEEKLY_CLASS_TEMPLATE: AthleteClassTemplateEntry[] = [
   { weekday: 3, time: "10:30", title: "Open Gym", capacity: 20 },
   { weekday: 3, time: "16:00", title: "Regular Class", capacity: 20 },
   { weekday: 4, time: "06:00", title: "Regular Class", capacity: 20 },
+  { weekday: 4, time: "09:30", title: "Women's Class", capacity: 20 },
   { weekday: 4, time: "10:30", title: "Open Gym", capacity: 20 },
   { weekday: 4, time: "16:00", title: "Regular Class", capacity: 20 },
   { weekday: 5, time: "06:00", title: "Regular Class", capacity: 20 },

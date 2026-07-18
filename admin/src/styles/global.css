@@ -233,9 +233,13 @@ main {
   min-width: 0;
 }
 
-.topbar-command {
+.client-recall {
+  position: relative;
   width: min(34vw, 420px);
   min-width: 250px;
+}
+
+.client-recall-search {
   display: flex;
   align-items: center;
   min-height: 42px;
@@ -243,9 +247,168 @@ main {
   border: 1px solid rgba(43, 55, 92, 0.92);
   border-radius: 14px;
   background: rgba(9, 14, 29, 0.76);
+}
+
+.client-recall-icon {
   color: var(--muted);
+  margin-right: 8px;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.client-recall-input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
+}
+
+.client-recall-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.client-recall-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(720px, 82vw);
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(43, 55, 92, 0.96);
+  border-radius: 16px;
+  background: rgba(9, 14, 29, 0.98);
+  box-shadow: 0 24px 70px rgba(3, 6, 15, 0.48);
+}
+
+.client-recall-results {
+  display: grid;
+  gap: 8px;
+}
+
+.client-recall-result {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid rgba(43, 55, 92, 0.76);
+  border-radius: 12px;
+  background: rgba(20, 28, 51, 0.72);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.client-recall-result span,
+.client-recall-history-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.client-recall-result small,
+.client-recall-history-header span,
+.client-recall-muted,
+.client-recall-history-row small {
+  color: var(--muted);
+}
+
+.client-recall-result em {
+  font-style: normal;
+  color: var(--primary-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.client-recall-history {
+  display: grid;
+  gap: 12px;
+}
+
+.client-recall-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+
+.client-recall-history-header button {
+  border: 1px solid rgba(43, 55, 92, 0.9);
+  border-radius: 10px;
+  background: rgba(20, 28, 51, 0.72);
+  color: var(--primary-soft);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.client-recall-summary,
+.client-recall-history-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-recall-summary span,
+.client-recall-history-grid section {
+  padding: 10px;
+  border: 1px solid rgba(43, 55, 92, 0.72);
+  border-radius: 12px;
+  background: rgba(20, 28, 51, 0.55);
+  color: var(--muted);
+}
+
+.client-recall-summary strong {
+  display: block;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.client-recall-history-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-recall-history-grid h4 {
+  margin: 0 0 8px;
+}
+
+.client-recall-history-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(43, 55, 92, 0.62);
+}
+
+.client-recall-history-row span {
+  color: var(--primary-soft);
+  font-size: 12px;
+}
+
+.client-recall-history-row strong,
+.client-recall-history-row small {
+  overflow-wrap: anywhere;
+}
+
+.client-recall-history-row small {
+  grid-column: 2;
+}
+
+.client-recall-muted {
+  margin: 0;
+}
+
+.client-recall-error {
+  margin: 0;
+  color: var(--danger);
 }
 
 .security-pill {
@@ -950,9 +1113,21 @@ main {
   }
 
   .topbar-actions,
-  .topbar-command {
+  .client-recall {
     width: 100%;
     min-width: 0;
+  }
+
+  .client-recall-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
+    max-height: none;
+  }
+
+  .client-recall-summary,
+  .client-recall-history-grid {
+    grid-template-columns: 1fr;
   }
 
   .page-heading {

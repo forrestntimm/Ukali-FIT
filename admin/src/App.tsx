@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useNavigate, Outlet, Navigate, useLocation } from "react-router-dom";
 import BrandedSplash from "./components/BrandedSplash";
+import ClientRecall from "./components/ClientRecall";
 import { api } from "./api/client";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { Session } from "@supabase/supabase-js";
@@ -102,7 +103,7 @@ function Layout({ onLogout }: { onLogout: () => void }) {
             <strong className="topbar-title">{currentLabel}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="topbar-command">Fast recall ready</span>
+            <ClientRecall />
             <span className="security-pill">secure</span>
             <span className="admin-avatar" aria-hidden="true">U</span>
           </div>

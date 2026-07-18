@@ -34,6 +34,26 @@ test("backend exposes lightweight member options and stats queries for admin sur
     /checkInQrCode:/,
     "dashboard stats query should not expose per-user QR data"
   );
+  assert.match(
+    dashboardStatsSource,
+    /prisma\.classSignup\.findMany/,
+    "dashboard stats should aggregate athlete app check-in activity"
+  );
+  assert.match(
+    dashboardStatsSource,
+    /prisma\.workoutLog\.findMany/,
+    "dashboard stats should aggregate athlete workout logs"
+  );
+  assert.match(
+    dashboardStatsSource,
+    /prisma\.coachClassSession\.findMany/,
+    "dashboard stats should aggregate coach app class sessions"
+  );
+  assert.match(
+    dashboardStatsSource,
+    /activityBuckets\.map/,
+    "dashboard stats should return a chart-ready activity series"
+  );
 });
 
 test("coach summary route supports lightweight class loading for dashboard and scan flows", () => {

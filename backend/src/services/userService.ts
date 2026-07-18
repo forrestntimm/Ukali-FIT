@@ -123,7 +123,26 @@ export async function listMemberOptions() {
 }
 
 export async function getMemberDashboardStats() {
-  const [members, overdue] = await Promise.all([
+  const activityBuckets = buildActivityBuckets(8);
+  const bucketsByDateKey = new Map(activityBuckets.map((bucket) => [bucket.dateKey, bucket]));
+  const activityFrom = new Date(`${activityBuckets[0].dateKey}T00:00:00.000Z`);
+  const activityTo = addUtcDays(new Date(`${activityBuckets[activityBuckets.length - 1].dateKey}T00:00:00.000Z`), 1);
+  const renewalWindowEnd = addUtcDays(new Date(), 14);
+
+  const [
+    members,
+    overdue,
+    upcoming,
+    activeCoaches,
+    totalCheckIns,
+    totalWorkoutLogs,
+    totalCoachSessions,
+    scheduledClasses,
+    recentCheckIns,
+    recentWorkoutLogs,
+    recentCoachSessions,
+    recentClasses
+  ] = await Promise.all([
     prisma.user.count({
       where: realAthleteProfileWhere
     }),
@@ -132,10 +151,99 @@ export async function getMemberDashboardStats() {
         ...realAthleteProfileWhere,
         paymentStatus: PaymentStatus.UNPAID
       }
+    }),
+    prisma.user.count({
+      where: {
+        ...realAthleteProfileWhere,
+        paymentStatus: PaymentStatus.PAID,
+        nextPaymentDue: {
+          gte: new Date(),
+          lte: renewalWindowEnd
+        }
+      }
+    }),
+    prisma.user.count({
+      where: { role: Role.ADMIN }
+    }),
+    prisma.classSignup.count({
+      where: { checkedInAt: { not: null } }
+    }),
+    prisma.workoutLog.count(),
+    prisma.coachClassSession.count(),
+    prisma.class.count({
+      where: {
+        datetime: { gte: new Date() },
+        status: { not: "CANCELED" }
+      }
+    }),
+    prisma.classSignup.findMany({
+      where: {
+        checkedInAt: {
+          gte: activityFrom,
+          lt: activityTo
+        }
+      },
+      select: { checkedInAt: true }
+    }),
+    prisma.workoutLog.findMany({
+      where: {
+        checkedInAt: {
+          gte: activityFrom,
+          lt: activityTo
+        }
+      },
+      select: { checkedInAt: true }
+    }),
+    prisma.coachClassSession.findMany({
+      where: {
+        createdAt: {
+          gte: activityFrom,
+          lt: activityTo
+        }
+      },
+      select: { createdAt: true }
+    }),
+    prisma.class.findMany({
+      where: {
+        datetime: {
+          gte: activityFrom,
+          lt: activityTo
+        },
+        status: { not: "CANCELED" }
+      },
+      select: { datetime: true }
     })
   ]);
 
-  return { members, overdue, upcoming: 0 };
+  for (const checkIn of recentCheckIns) {
+    if (checkIn.checkedInAt) incrementBucket(bucketsByDateKey, checkIn.checkedInAt, "athleteCheckIns");
+  }
+  for (const log of recentWorkoutLogs) {
+    incrementBucket(bucketsByDateKey, log.checkedInAt, "workoutLogs");
+  }
+  for (const session of recentCoachSessions) {
+    incrementBucket(bucketsByDateKey, session.createdAt, "coachSessions");
+  }
+  for (const klass of recentClasses) {
+    incrementBucket(bucketsByDateKey, klass.datetime, "scheduledClasses");
+  }
+
+  const activity = activityBuckets.map((bucket) => ({
+    ...bucket,
+    total: bucket.athleteCheckIns + bucket.workoutLogs + bucket.coachSessions + bucket.scheduledClasses
+  }));
+
+  return {
+    members,
+    overdue,
+    upcoming,
+    activeCoaches,
+    totalCheckIns,
+    totalWorkoutLogs,
+    totalCoachSessions,
+    scheduledClasses,
+    activity
+  };
 }
 
 export async function updateUser(id: string, data: {
@@ -278,6 +386,50 @@ export function withMembershipStatusAndProfileMetrics(user: {
     workoutStreak: calculateCurrentWorkoutStreak(classSignups),
     daysLeftInMembership: calculateDaysLeftInMembership(rest.nextPaymentDue, rest.paymentStatus)
   };
+}
+
+function startOfUtcDay(date: Date) {
+  const day = new Date(date);
+  day.setUTCHours(0, 0, 0, 0);
+  return day;
+}
+
+function addUtcDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function formatShortDateLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(date);
+}
+
+function buildActivityBuckets(dayCount: number) {
+  const today = startOfUtcDay(new Date());
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = addUtcDays(today, index - (dayCount - 1));
+    const dateKey = toDateKey(date);
+    return {
+      dateKey,
+      label: formatShortDateLabel(date),
+      athleteCheckIns: 0,
+      workoutLogs: 0,
+      coachSessions: 0,
+      scheduledClasses: 0,
+      total: 0
+    };
+  });
+}
+
+function incrementBucket<T extends { [key: string]: any }>(
+  bucketsByDateKey: Map<string, T>,
+  date: Date,
+  key: keyof T
+) {
+  const bucket = bucketsByDateKey.get(toDateKey(date));
+  if (!bucket) return;
+  const current = Number(bucket[key] || 0);
+  bucket[key] = (current + 1) as T[keyof T];
 }
 
 export async function getUserForAuthByEmail(email: string) {

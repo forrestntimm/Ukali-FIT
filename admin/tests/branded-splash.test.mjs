@@ -26,6 +26,11 @@ test("admin app uses a shared branded splash for startup loading", () => {
   assert.match(appSource, /return <BrandedSplash title="Ukali Admin" subtitle="Loading your dashboard\.\.\." \/>;/);
 });
 
+test("admin app falls back to Supabase session when cached auth token is stale", () => {
+  assert.match(appSource, /const restoreSupabaseSession = async \(\) =>/, "app should centralize Supabase session restoration");
+  assert.match(appSource, /clearCachedAuthToken\(\);[\s\S]*setAuthed\(false\);[\s\S]*finally[\s\S]*restoreSupabaseSession\(\)/, "stale cached token should not leave the app logged out before checking Supabase session");
+});
+
 test("admin login page uses the branded splash shell", () => {
   assert.match(loginSource, /import BrandedSplash from "\.\.\/components\/BrandedSplash"/);
   assert.match(loginSource, /<BrandedSplash[\s\S]*title="Ukali Admin"[\s\S]*subtitle="Sign in to manage the gym\."[\s\S]*>/);

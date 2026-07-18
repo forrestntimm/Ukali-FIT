@@ -16,6 +16,7 @@ import {
   warmSchedulingData,
   warmWorkoutsData
 } from "./lib/adminWarmups";
+import wallpaperLogo from "./assets/wallpaper-logo.png";
 
 const loadDashboardPage = () => import("./pages/DashboardPage");
 const loadMembersPage = () => import("./pages/MembersPage");
@@ -54,11 +55,26 @@ function RouteFallback() {
 }
 
 function Layout({ onLogout }: { onLogout: () => void }) {
+  const location = useLocation();
+  const currentItem = ADMIN_NAV_ITEMS.find((item) => {
+    if (item.to === "/") return location.pathname === "/";
+    return location.pathname.startsWith(item.to);
+  });
+  const currentLabel = currentItem?.label || "Dashboard";
+
   return (
     <div className="main-layout">
       <aside className="sidebar">
-        <div className="logo">Ukali Admin</div>
-        <nav style={{ display: "grid", gap: 8 }}>
+        <div className="sidebar-brand">
+          <span className="brand-mark">
+            <img src={wallpaperLogo} alt="" />
+          </span>
+          <span>
+            <span className="logo">Ukali</span>
+            <span className="logo-subtitle">Admin Console</span>
+          </span>
+        </div>
+        <nav className="sidebar-nav" aria-label="Admin navigation">
           {ADMIN_NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -67,17 +83,28 @@ function Layout({ onLogout }: { onLogout: () => void }) {
               onFocus={() => preloadAdminTab(item.preload, item.warmData)}
               onMouseEnter={() => preloadAdminTab(item.preload, item.warmData)}
             >
-              {item.label}
+              <span className="nav-link-icon" aria-hidden="true">{item.label.slice(0, 1)}</span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <button className="secondary-btn" onClick={onLogout}>Sign Out</button>
+        <div className="sidebar-plan">
+          <span className="sidebar-plan-label">Live Gym Ops</span>
+          <strong>Performance Mode</strong>
+          <span>Data warms in the background so each tab opens fast.</span>
+        </div>
+        <button className="secondary-btn sidebar-logout" onClick={onLogout}>Sign Out</button>
       </aside>
       <main>
         <div className="topbar">
-          <div style={{ fontSize: 14, color: "var(--muted)" }}>Admin Console</div>
-          <div style={{ fontSize: 12, fontFamily: "IBM Plex Mono", color: "var(--primary-soft)" }}>
-            secure
+          <div>
+            <span className="topbar-kicker">Admin Console</span>
+            <strong className="topbar-title">{currentLabel}</strong>
+          </div>
+          <div className="topbar-actions">
+            <span className="topbar-command">Fast recall ready</span>
+            <span className="security-pill">secure</span>
+            <span className="admin-avatar" aria-hidden="true">U</span>
           </div>
         </div>
         <Outlet />
@@ -149,6 +176,18 @@ VITE_ADMIN_CALLBACK_URL
   useEffect(() => {
     let mounted = true;
 
+    const restoreSupabaseSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return false;
+
+      if (data.session) {
+        await completeSupabaseLogin(data.session);
+        return true;
+      }
+
+      return false;
+    };
+
     const init = async () => {
       const token = primeCachedAuthTokenFromStorage();
       if (token) {
@@ -166,20 +205,16 @@ VITE_ADMIN_CALLBACK_URL
           clearCachedAuthToken();
           setAuthed(false);
         } finally {
-          if (mounted) setLoading(false);
+          if (mounted) {
+            const restored = await restoreSupabaseSession();
+            if (!restored) setLoading(false);
+          }
         }
         return;
       }
 
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      if (data.session) {
-        await completeSupabaseLogin(data.session);
-        return;
-      }
-
-      setLoading(false);
+      const restored = await restoreSupabaseSession();
+      if (!restored && mounted) setLoading(false);
     };
 
     void init();

@@ -106,6 +106,11 @@ test("dashboard page restores cached stats before refreshing", () => {
     /api\.get\("\/users"\)/,
     "dashboard should not fetch the heavy users index just to render summary cards"
   );
+  assert.match(dashboardSource, /normalizeDashboardStats/, "dashboard should tolerate older cached stat payloads");
+  assert.match(dashboardSource, /stats\.activity/, "dashboard should render the backend activity series");
+  assert.match(dashboardSource, /activity\.map/, "dashboard graph should be data-driven instead of hard-coded bars");
+  assert.match(dashboardSource, /totalCoachSessions/, "dashboard should expose coach app session totals");
+  assert.match(dashboardSource, /totalWorkoutLogs/, "dashboard should expose athlete workout log totals");
 });
 
 test("members page restores cached member list before refreshing", () => {

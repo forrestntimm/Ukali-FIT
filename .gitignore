@@ -9,4 +9,6 @@ build/
 coverage/
 mobile/.local/
 mobile/local-builds/
+mobile/credentials/
+mobile/credentials.json
 mobile/build-*.ipa

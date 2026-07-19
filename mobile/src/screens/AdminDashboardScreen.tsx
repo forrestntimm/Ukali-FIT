@@ -55,6 +55,7 @@ export default function AdminDashboardScreen() {
   const [wod, setWod] = useState<WorkoutItem | null>(initialCached?.wod || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gymScheduleExpanded, setGymScheduleExpanded] = useState(false);
 
   const loadClassDetails = useCallback(async (classId: string) => {
     const signupResult = await Promise.allSettled([
@@ -211,15 +212,28 @@ export default function AdminDashboardScreen() {
 
         {classes.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Gym Schedule</Text>
-            <Text style={styles.subText}>Upcoming open classes at the gym.</Text>
-            {gymSchedule.length === 0 ? <Text style={styles.subText}>No upcoming open classes are available right now.</Text> : null}
-            {gymSchedule.map((klass) => (
+            <TouchableOpacity
+              style={styles.gymScheduleHeader}
+              onPress={() => setGymScheduleExpanded((current) => !current)}
+              accessibilityRole="button"
+              accessibilityLabel={`${gymScheduleExpanded ? "Collapse" : "Expand"} gym schedule`}
+              activeOpacity={0.85}
+            >
+              <View>
+                <Text style={styles.cardTitle}>Gym Schedule</Text>
+                <Text style={styles.subText}>Upcoming open classes at the gym.</Text>
+              </View>
+              <Text style={styles.gymScheduleToggle}>{gymScheduleExpanded ? "Collapse" : "Expand"}</Text>
+            </TouchableOpacity>
+            {gymScheduleExpanded && gymSchedule.length === 0 ? (
+              <Text style={styles.subText}>No upcoming open classes are available right now.</Text>
+            ) : null}
+            {gymScheduleExpanded ? gymSchedule.map((klass) => (
               <View key={klass.id} style={styles.gymScheduleRow}>
                 <Text style={styles.classChipTitle}>{klass.title}</Text>
                 <Text style={styles.subText}>{formatDateTimeInAppTimeZone(klass.datetime)}</Text>
               </View>
-            ))}
+            )) : null}
           </View>
         ) : null}
 
@@ -332,6 +346,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: 10,
     paddingBottom: 10
+  },
+  gymScheduleHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  gymScheduleToggle: {
+    color: theme.colors.accent,
+    fontWeight: "700"
   },
   metricsRow: {
     flexDirection: "row",

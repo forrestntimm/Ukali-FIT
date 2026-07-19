@@ -544,6 +544,26 @@ test("coach mobile admin flows use lightweight classes and athlete option payloa
     /<Text style=\{styles\.cardTitle\}>Gym Schedule<\/Text>/,
     "admin dashboard should show a Gym Schedule fallback card when the coach has no assigned classes"
   );
+  assert.match(
+    adminDashboardSource,
+    /const \[gymScheduleExpanded,\s*setGymScheduleExpanded\] = useState\(false\)/,
+    "admin dashboard gym schedule should start collapsed behind an explicit expand state"
+  );
+  assert.match(
+    adminDashboardSource,
+    /onPress=\{\(\) => setGymScheduleExpanded\(\(current\) => !current\)\}/,
+    "admin dashboard gym schedule header should toggle expanded and collapsed states"
+  );
+  assert.match(
+    adminDashboardSource,
+    /gymScheduleExpanded \? "Collapse" : "Expand"/,
+    "admin dashboard gym schedule toggle should clearly show whether it will expand or collapse"
+  );
+  assert.match(
+    adminDashboardSource,
+    /gymScheduleExpanded \? gymSchedule\.map/,
+    "admin dashboard should only render gym schedule rows when the schedule is expanded"
+  );
   assert.doesNotMatch(
     adminDashboardSource,
     /<Text style=\{styles\.cardTitle\}>No Assigned Classes<\/Text>/,

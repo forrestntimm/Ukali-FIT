@@ -103,13 +103,15 @@ export default function AdminScanScreen() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  const loadClassRoster = useCallback(async (classId: string) => {
+  const loadClassRoster = useCallback(async (classId: string, options: { silent?: boolean } = {}) => {
     if (!classId) {
       setClassRoster([]);
       setSelectedRosterUserId("");
-      return;
+      return [] as ClassSignupItem[];
     }
-    setLoadingRoster(true);
+    // Silent refreshes (background polling, post-check-in syncs) must not
+    // flash spinners or disable the check-in controls every few seconds.
+    if (!options.silent) setLoadingRoster(true);
     try {
       const res = await api.get(`/classes/${classId}/signups`);
       const roster = res.data as ClassSignupItem[];
@@ -123,15 +125,17 @@ export default function AdminScanScreen() {
       if (selectedRosterUserId && !roster.some((signup) => signup.user?.id === selectedRosterUserId)) {
         setSelectedRosterUserId("");
       }
+      return roster;
     } catch {
-      setClassRoster([]);
+      if (!options.silent) setClassRoster([]);
+      return [] as ClassSignupItem[];
     } finally {
-      setLoadingRoster(false);
+      if (!options.silent) setLoadingRoster(false);
     }
-  }, [selectedRosterUserId]);
+  }, [classes, selectedRosterUserId]);
 
   const loadClasses = useCallback(async () => {
-    setLoadingClasses(true);
+    setLoadingClasses((current) => current || classes.length === 0);
     try {
       const res = await api.get("/classes", { params: { mine: "true", summary: "true", limit: "20" } });
       const all = (res.data as ClassItem[]).filter((item) => item.status !== "CANCELED");
@@ -143,17 +147,17 @@ export default function AdminScanScreen() {
         ? selectedClassId
         : options[0]?.id || "";
       setSelectedClassId(nextSelectedClassId);
-      await loadClassRoster(nextSelectedClassId);
+      const roster = await loadClassRoster(nextSelectedClassId, { silent: classRoster.length > 0 });
       await writeScreenCache<AdminScanCacheEnvelope>("admin-scan", {
         classes: options,
         selectedClassId: nextSelectedClassId,
-        classRoster,
+        classRoster: roster,
         savedAt: Date.now()
       });
     } finally {
       setLoadingClasses(false);
     }
-  }, [loadClassRoster, selectedClassId]);
+  }, [classRoster.length, classes.length, loadClassRoster, selectedClassId]);
 
   const { seedLoadedAt } = useStaleFocusRefresh(loadClasses, 5 * 60 * 1000);
 
@@ -173,9 +177,9 @@ export default function AdminScanScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!selectedClassId) return;
-      void loadClassRoster(selectedClassId);
+      void loadClassRoster(selectedClassId, { silent: true });
       const interval = setInterval(() => {
-        void loadClassRoster(selectedClassId);
+        void loadClassRoster(selectedClassId, { silent: true });
       }, 15000);
       return () => clearInterval(interval);
     }, [loadClassRoster, selectedClassId])
@@ -244,8 +248,7 @@ export default function AdminScanScreen() {
             message
           );
         }
-        await loadClasses();
-        await loadClassRoster(selectedClassId);
+        await loadClassRoster(selectedClassId, { silent: true });
       } catch (err: any) {
         const message = err?.response?.data?.message || "Unable to save check-in.";
         setStatusError(message);
@@ -258,7 +261,7 @@ export default function AdminScanScreen() {
         setTimeout(() => setScanLocked(false), 1500);
       }
     },
-    [loadClassRoster, loadClasses, performance.coachNotes, performance.completionTime, performance.movementScales, performance.weight, selectedClassId, submitting]
+    [loadClassRoster, performance.coachNotes, performance.completionTime, performance.movementScales, performance.weight, selectedClassId, submitting]
   );
 
   const checkedInCount = classRoster.filter((item) => item.checkedInAt).length;

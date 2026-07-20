@@ -94,6 +94,9 @@ function tabIconName(routeName: string) {
 function buildTabScreenOptions(routeName: string) {
   return {
     headerShown: false,
+    // Mount every tab at startup so switching tabs never pays a first-tap
+    // mount penalty; screens render instantly from their warm caches.
+    lazy: false,
     tabBarActiveTintColor: theme.colors.textPrimary,
     tabBarInactiveTintColor: theme.colors.textSecondary,
     tabBarStyle: {
@@ -117,14 +120,7 @@ function CoachTabsNavigator() {
     <CoachTabs.Navigator detachInactiveScreens={false} screenOptions={({ route }) => buildTabScreenOptions(route.name)}>
       <CoachTabs.Screen name="Dashboard" component={AdminDashboardScreen} />
       <CoachTabs.Screen name="Members" component={AdminMembersScreen} />
-      <CoachTabs.Screen
-        name="Classes"
-        component={AdminClassesManageScreen}
-        options={{
-          // Keep the classes shell mounted so opening this tab does not pay a first-tap mount penalty.
-          lazy: false
-        }}
-      />
+      <CoachTabs.Screen name="Classes" component={AdminClassesManageScreen} />
       <CoachTabs.Screen name="Check-In" component={AdminScanScreen} />
       <CoachTabs.Screen name="Profile" component={ProfileScreen} />
     </CoachTabs.Navigator>

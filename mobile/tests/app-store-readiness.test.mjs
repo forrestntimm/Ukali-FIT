@@ -187,25 +187,22 @@ test("variant-specific icon assets exist for athlete and coach", () => {
   assert.ok(fs.existsSync(coachAdaptiveIconPath), "coach adaptive icon asset should exist");
 });
 
-test("tab startup does not eagerly mount and refetch every tab on cold launch", () => {
+test("tab screens mount up front for instant switches but only fetch when focused", () => {
   const athleteRootSource = fs.readFileSync(athleteRootPath, "utf8");
   const coachRootSource = fs.readFileSync(coachRootPath, "utf8");
   const staleFocusRefreshSource = fs.readFileSync(staleFocusRefreshPath, "utf8");
 
-  assert.doesNotMatch(
+  // Eager mounting is render-only: screens paint from warm caches and their
+  // network loads still wait for focus, so cold start does not fan out fetches.
+  assert.match(
     athleteRootSource,
     /lazy:\s*false/,
-    "athlete tabs should not force eager mounting because that fans out cold-start work across every tab"
+    "athlete tabs should pre-mount so switching tabs never pays a first-tap mount penalty"
   );
   assert.match(
     coachRootSource,
-    /CoachTabs\.Screen[\s\S]*name="Classes"[\s\S]*lazy:\s*false/s,
-    "coach classes tab should pre-mount so first opening that specific screen does not pay a mount penalty"
-  );
-  assert.equal(
-    (coachRootSource.match(/lazy:\s*false/g) || []).length,
-    1,
-    "coach root should only pre-mount the Classes tab instead of eagerly mounting the whole tab set"
+    /lazy:\s*false/,
+    "coach tabs should pre-mount so switching tabs never pays a first-tap mount penalty"
   );
   assert.doesNotMatch(
     staleFocusRefreshSource,
@@ -1450,8 +1447,13 @@ test("auth bootstrap preserves the signed-in session and cached user profile acr
   );
   assert.match(
     source,
-    /cachedUser\.user\.id === session\.user\.id/,
-    "cached user fallback should only be reused when it matches the active session user"
+    /cachedUser\.supabaseUserId && cachedUser\.supabaseUserId === session\.user\.id/,
+    "cached user fallback should only be reused when it matches the active Supabase session identity"
+  );
+  assert.match(
+    source,
+    /cachedEmail && sessionEmail && cachedEmail === sessionEmail/,
+    "cached user fallback should accept a verified email match for caches saved before the Supabase id was stored"
   );
   assert.doesNotMatch(
     source,

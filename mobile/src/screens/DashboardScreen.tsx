@@ -37,7 +37,7 @@ export default function DashboardScreen() {
     useCallback(async () => {
       await loadWod();
     }, [loadWod]),
-    30000
+    5 * 60 * 1000
   );
 
   const nextDue = user?.nextPaymentDue ? new Date(user.nextPaymentDue) : null;

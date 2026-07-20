@@ -40,6 +40,9 @@ function tabIconName(routeName: string) {
 function buildTabScreenOptions(routeName: string) {
   return {
     headerShown: false,
+    // Mount every tab at startup so switching tabs never pays a first-tap
+    // mount penalty; screens render instantly from their warm caches.
+    lazy: false,
     tabBarActiveTintColor: theme.colors.textPrimary,
     tabBarInactiveTintColor: theme.colors.textSecondary,
     tabBarStyle: {

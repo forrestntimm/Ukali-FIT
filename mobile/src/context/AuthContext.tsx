@@ -60,6 +60,7 @@ const USER_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 type CachedUserRecord = {
   user: User;
   cachedAt: number;
+  supabaseUserId?: string;
 };
 
 function normalizeCachedUser(raw: unknown): CachedUserRecord | null {
@@ -88,7 +89,12 @@ function isCachedUserFresh(cachedUser: CachedUserRecord) {
 function getSafeCachedUserForSession(cachedUser: CachedUserRecord | null, session: Session) {
   if (!cachedUser) return null;
   if (!isCachedUserFresh(cachedUser)) return null;
-  if (cachedUser.user.id === session.user.id) return cachedUser.user;
+  // The local profile id and the Supabase auth id are different id spaces, so
+  // match on the stored Supabase id (new caches) or the account email.
+  if (cachedUser.supabaseUserId && cachedUser.supabaseUserId === session.user.id) return cachedUser.user;
+  const cachedEmail = cachedUser.user.email?.toLowerCase();
+  const sessionEmail = session.user.email?.toLowerCase();
+  if (cachedEmail && sessionEmail && cachedEmail === sessionEmail) return cachedUser.user;
   return null;
 }
 
@@ -101,7 +107,7 @@ async function restoreCachedUser() {
   }
 }
 
-async function cacheUser(user: User | null) {
+async function cacheUser(user: User | null, supabaseUserId?: string) {
   if (!user) {
     await AsyncStorage.removeItem(USER_CACHE_STORAGE_KEY);
     return;
@@ -111,7 +117,8 @@ async function cacheUser(user: User | null) {
     USER_CACHE_STORAGE_KEY,
     JSON.stringify({
       user,
-      cachedAt: Date.now()
+      cachedAt: Date.now(),
+      supabaseUserId
     } satisfies CachedUserRecord)
   );
 }
@@ -147,8 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearCachedAccessToken();
   }, []);
 
-  const bootstrap = async (session: Session) => {
-    setCachedAccessToken(session.access_token);
+  const syncUserFromServer = async (session: Session) => {
     const res = await api.post(
       "/auth/bootstrap",
       {},
@@ -159,7 +165,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setAuthError(null);
     setUser(res.data.user);
-    await cacheUser(res.data.user);
+    await cacheUser(res.data.user, session.user.id);
+    return res.data.user as User;
+  };
+
+  const bootstrap = async (session: Session) => {
+    setCachedAccessToken(session.access_token);
+
+    // Returning users get their saved profile on screen immediately; the
+    // network bootstrap refreshes it in the background instead of blocking
+    // the dashboard behind two sequential round trips.
+    const cachedUser = getSafeCachedUserForSession(await restoreCachedUser(), session);
+    if (cachedUser) {
+      setAuthError(null);
+      setUser(cachedUser);
+      void syncUserFromServer(session).catch(() => {
+        // Keep showing the cached profile; the next focus/app start retries.
+      });
+      return;
+    }
+
+    await syncUserFromServer(session);
   };
 
   const refreshBiometricAvailability = useCallback(async () => {
@@ -388,7 +414,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         return;
       }
-      await bootstrap(data.session);
+      // Explicit refreshes (e.g. after profile saves) must hit the network so
+      // the cache-first bootstrap cannot resurface a stale profile.
+      setCachedAccessToken(data.session.access_token);
+      await syncUserFromServer(data.session);
     } catch (error) {
       const { data } = await safeGetSession(supabase);
       const cachedUser = await restoreCachedUser();

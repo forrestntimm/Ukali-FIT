@@ -126,8 +126,8 @@ export default function ProfileScreen() {
   const loadCoachProfile = useCallback(async () => {
     if (!shouldShowCoachSections || !user) return;
 
-    setLoadingCoachStats((current) => current || classesCoached === 0);
-    setLoadingCoachSchedule((current) => current || coachSchedule.length === 0);
+    setLoadingCoachStats((current) => current || (classesCoached === 0 && !initialCoachCache));
+    setLoadingCoachSchedule((current) => current || (coachSchedule.length === 0 && !initialCoachCache));
     try {
       const [statsRes, scheduleRes] = await Promise.all([
         api.get("/users/me/coach-stats"),

@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { prisma } from "../utils/prisma";
 import { getPaymentPlan, type PaymentPlan } from "./paymentPlans";
 import { config } from "../utils/config";
+import { clearDashboardCaches } from "./userService";
 
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey, { apiVersion: "2024-06-20" }) : null;
 
@@ -60,6 +61,7 @@ export async function markManualPayment(
   });
 
   await updateUserPaymentStatus(userId, PaymentMethod.CASH, plan, paidAt);
+  clearDashboardCaches();
   return payment;
 }
 
@@ -136,6 +138,7 @@ export async function handleStripeWebhook(signature: string | string[] | undefin
         data: { status: PaymentState.SUCCESS, date: new Date() }
       });
       await updateUserPaymentStatus(userId, PaymentMethod.PHONE_PAY);
+      clearDashboardCaches();
     }
   }
 
@@ -193,4 +196,5 @@ export async function markOverdueMembers() {
     },
     data: { paymentStatus: PaymentStatus.UNPAID }
   });
+  clearDashboardCaches();
 }

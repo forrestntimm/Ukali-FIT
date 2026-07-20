@@ -4,11 +4,18 @@ import { logger } from "../utils/logger";
 import { isBlockedClassTime, removeBlockedClassTimes } from "../utils/classTimeRules";
 import { normalizeCheckInQrCode } from "./checkInQr";
 import { sendCoachScheduleNotification } from "./notificationService";
+import { clearResponseCache, readResponseCache, writeResponseCache } from "../utils/responseCache";
 
 const APP_TIME_ZONE = "Asia/Kathmandu";
 
 function toUtcMidnight(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+function addUtcDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function resolveAppDayStart() {
@@ -59,6 +66,7 @@ export async function createClass(data: { title: string; datetime: Date; capacit
 
   await assertCoachExists(data.coachId);
   const klass = await prisma.class.create({ data });
+  clearClassCaches();
 
   void sendCoachScheduleNotification({
     coachId: data.coachId,
@@ -72,20 +80,26 @@ export async function createClass(data: { title: string; datetime: Date; capacit
   return klass;
 }
 
-export async function listUpcomingClasses(args?: { coachId?: string; from?: Date; to?: Date }) {
+export async function listUpcomingClasses(args?: { coachId?: string; from?: Date; to?: Date; limit?: number }) {
   const coachId = args?.coachId;
-  const from = args?.from;
-  const to = args?.to;
+  const from = args?.from || resolveAppDayStart();
+  const to = args?.to || addUtcDays(from, 14);
+  const limit = Math.max(1, Math.min(args?.limit ?? 100, 150));
+  const cacheKey = `classes:upcoming:${coachId || "all"}:${from.toISOString()}:${to.toISOString()}:${limit}`;
+  const cached = readResponseCache<Awaited<ReturnType<typeof prisma.class.findMany>>>(cacheKey);
+  if (cached !== undefined) return cached;
+
   const coachAssignmentWhere = coachId ? { OR: [{ coachId }, { secondaryCoachId: coachId }] } : {};
   const classes = await prisma.class.findMany({
     where: {
       datetime: {
-        gte: from || new Date(),
-        lte: to || undefined
+        gte: from,
+        lte: to
       },
       ...coachAssignmentWhere
     },
     orderBy: { datetime: "asc" },
+    take: limit,
     include: {
       signups: {
         select: {
@@ -111,13 +125,26 @@ export async function listUpcomingClasses(args?: { coachId?: string; from?: Date
     }
   });
 
-  return removeBlockedClassTimes(classes);
+  return writeResponseCache(cacheKey, removeBlockedClassTimes(classes), 20 * 1000);
 }
 
 export async function listAssignedClassSummaries(args: { coachId: string; from?: Date; to?: Date; limit?: number }) {
   const from = args.from;
   const to = args.to;
   const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+  const fromKey = (from || resolveAppDayStart()).toISOString();
+  const cacheKey = `classes:assigned-summary:${args.coachId}:${fromKey}:${to?.toISOString() || "open"}:${limit}`;
+  const cached = readResponseCache<Array<{
+    id: string;
+    title: string;
+    datetime: Date;
+    capacity: number;
+    status: ClassStatus;
+    coachAssignmentRole: "PRIMARY" | "SECONDARY";
+    reservationCount: number;
+    checkedInCount: number;
+  }>>(cacheKey);
+  if (cached !== undefined) return cached;
 
   const classes = await prisma.class.findMany({
     where: {
@@ -148,7 +175,7 @@ export async function listAssignedClassSummaries(args: { coachId: string; from?:
   const visibleClasses = removeBlockedClassTimes(classes);
 
   if (visibleClasses.length === 0) {
-    return [];
+    return writeResponseCache(cacheKey, [], 20 * 1000);
   }
 
   const checkedInCounts = await prisma.classSignup.groupBy({
@@ -170,7 +197,7 @@ export async function listAssignedClassSummaries(args: { coachId: string; from?:
     checkedInCounts.map((entry) => [entry.classId, entry._count.classId])
   );
 
-  return visibleClasses.map((klass) => ({
+  return writeResponseCache(cacheKey, visibleClasses.map((klass) => ({
     id: klass.id,
     title: klass.title,
     datetime: klass.datetime,
@@ -179,7 +206,7 @@ export async function listAssignedClassSummaries(args: { coachId: string; from?:
     coachAssignmentRole: klass.secondaryCoachId === args.coachId ? "SECONDARY" : "PRIMARY",
     reservationCount: klass._count.signups,
     checkedInCount: checkedInCountByClassId.get(klass.id) || 0
-  }));
+  })), 20 * 1000);
 }
 
 export async function listUpcomingClassSummaries(args?: { from?: Date; to?: Date; limit?: number }) {
@@ -346,6 +373,7 @@ export async function upsertSchedulingClass(input: {
       },
       select: getSchedulingClassSelect()
     });
+    clearClassCaches();
 
     const newlyAssignedCoachIds = [updated.coachId, updated.secondaryCoachId]
       .filter(Boolean)
@@ -375,6 +403,7 @@ export async function upsertSchedulingClass(input: {
     },
     select: getSchedulingClassSelect()
   });
+  clearClassCaches();
 
   for (const coachId of [created.coachId, created.secondaryCoachId].filter(Boolean) as string[]) {
     void sendCoachScheduleNotification({
@@ -391,7 +420,9 @@ export async function upsertSchedulingClass(input: {
 }
 
 export async function updateClassStatus(id: string, status: ClassStatus) {
-  return prisma.class.update({ where: { id }, data: { status } });
+  const updated = await prisma.class.update({ where: { id }, data: { status } });
+  clearClassCaches();
+  return updated;
 }
 
 export async function assignClassCoach(id: string, coachId: string) {
@@ -420,6 +451,7 @@ export async function assignClassCoach(id: string, coachId: string) {
       }
     }
   });
+  clearClassCaches();
 
   if (existing.coachId !== coachId) {
     void sendCoachScheduleNotification({
@@ -489,6 +521,7 @@ export async function assignClassCoaches(
       }
     }
   });
+  clearClassCaches();
 
   if (existing.coachId !== updated.coachId && updated.coachId) {
     void sendCoachScheduleNotification({
@@ -538,13 +571,19 @@ export async function signUpForClass(userId: string, classId: string) {
   }
 
   try {
-    return await prisma.classSignup.create({ data: { userId, classId } });
+    const signup = await prisma.classSignup.create({ data: { userId, classId } });
+    clearClassCaches();
+    return signup;
   } catch {
     const err = new Error("You are already signed up for this class") as Error & { status?: number; code?: string };
     err.status = 409;
     err.code = "CLASS_ALREADY_SIGNED_UP";
     throw err;
   }
+}
+
+export function clearClassCaches() {
+  clearResponseCache("classes:");
 }
 
 export async function listClassSignups(classId: string) {
@@ -779,6 +818,7 @@ export async function checkInMemberForClass(
 
   if (signup.checkedInAt) {
     await upsertCoachClassSession(actorCoachId, classId);
+    clearClassCaches();
     const workoutLog = await upsertWorkoutLogForCheckIn({
       userId: member.id,
       classId,
@@ -804,6 +844,7 @@ export async function checkInMemberForClass(
 
   const checkInAt = updated.checkedInAt as Date;
   await upsertCoachClassSession(actorCoachId, classId);
+  clearClassCaches();
   const workoutLog = await upsertWorkoutLogForCheckIn({
     userId: member.id,
     classId,

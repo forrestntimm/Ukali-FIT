@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { PaymentMethod, PaymentStatus, Prisma, Role } from "@prisma/client";
 import { prisma } from "../utils/prisma";
+import { clearResponseCache, readResponseCache, writeResponseCache } from "../utils/responseCache";
 
 const userMetricsSelect = {
   id: true,
@@ -85,6 +86,7 @@ export async function createUser(input: {
     },
     select: userMetricsSelect
   });
+  clearDashboardCaches();
   return withMembershipStatusAndProfileMetrics(user);
 }
 
@@ -111,7 +113,10 @@ export async function listCoachUsers() {
 }
 
 export async function listMemberOptions() {
-  return prisma.user.findMany({
+  const cached = readResponseCache<Awaited<ReturnType<typeof prisma.user.findMany>>>("users:member-options");
+  if (cached) return cached;
+
+  const members = await prisma.user.findMany({
     where: realAthleteProfileWhere,
     orderBy: { name: "asc" },
     select: {
@@ -124,130 +129,116 @@ export async function listMemberOptions() {
       lastLoginAt: true
     }
   });
+  return writeResponseCache("users:member-options", members, 30 * 1000);
 }
 
 export async function getMemberDashboardStats() {
+  const cached = readResponseCache<{
+    members: number;
+    overdue: number;
+    upcoming: number;
+    activeCoaches: number;
+    totalCheckIns: number;
+    totalWorkoutLogs: number;
+    totalCoachSessions: number;
+    scheduledClasses: number;
+    activity: Array<{
+      dateKey: string;
+      athleteCheckIns: number;
+      workoutLogs: number;
+      coachSessions: number;
+      scheduledClasses: number;
+      total: number;
+    }>;
+  }>("users:stats");
+  if (cached) return cached;
+
   const activityBuckets = buildActivityBuckets(8);
-  const bucketsByDateKey = new Map(activityBuckets.map((bucket) => [bucket.dateKey, bucket]));
   const activityFrom = new Date(`${activityBuckets[0].dateKey}T00:00:00.000Z`);
   const activityTo = addUtcDays(new Date(`${activityBuckets[activityBuckets.length - 1].dateKey}T00:00:00.000Z`), 1);
+  const now = new Date();
   const renewalWindowEnd = addUtcDays(new Date(), 14);
 
-  const [
-    members,
-    overdue,
-    upcoming,
-    activeCoaches,
-    totalCheckIns,
-    totalWorkoutLogs,
-    totalCoachSessions,
-    scheduledClasses,
-    recentCheckIns,
-    recentWorkoutLogs,
-    recentCoachSessions,
-    recentClasses
-  ] = await Promise.all([
-    prisma.user.count({
-      where: realAthleteProfileWhere
-    }),
-    prisma.user.count({
-      where: {
-        ...realAthleteProfileWhere,
-        paymentStatus: PaymentStatus.UNPAID
-      }
-    }),
-    prisma.user.count({
-      where: {
-        ...realAthleteProfileWhere,
-        paymentStatus: PaymentStatus.PAID,
-        nextPaymentDue: {
-          gte: new Date(),
-          lte: renewalWindowEnd
-        }
-      }
-    }),
-    prisma.user.count({
-      where: { role: Role.ADMIN }
-    }),
-    prisma.classSignup.count({
-      where: { checkedInAt: { not: null } }
-    }),
-    prisma.workoutLog.count(),
-    prisma.coachClassSession.count(),
-    prisma.class.count({
-      where: {
-        datetime: { gte: new Date() },
-        status: { not: "CANCELED" }
-      }
-    }),
-    prisma.classSignup.findMany({
-      where: {
-        checkedInAt: {
-          gte: activityFrom,
-          lt: activityTo
-        }
-      },
-      select: { checkedInAt: true }
-    }),
-    prisma.workoutLog.findMany({
-      where: {
-        checkedInAt: {
-          gte: activityFrom,
-          lt: activityTo
-        }
-      },
-      select: { checkedInAt: true }
-    }),
-    prisma.coachClassSession.findMany({
-      where: {
-        createdAt: {
-          gte: activityFrom,
-          lt: activityTo
-        }
-      },
-      select: { createdAt: true }
-    }),
-    prisma.class.findMany({
-      where: {
-        datetime: {
-          gte: activityFrom,
-          lt: activityTo
-        },
-        status: { not: "CANCELED" }
-      },
-      select: { datetime: true }
-    })
-  ]);
+  const [stats] = await prisma.$queryRaw<Array<{
+    members: number;
+    overdue: number;
+    upcoming: number;
+    activeCoaches: number;
+    totalCheckIns: number;
+    totalWorkoutLogs: number;
+    totalCoachSessions: number;
+    scheduledClasses: number;
+    activity: Array<{
+      dateKey: string;
+      athleteCheckIns: number;
+      workoutLogs: number;
+      coachSessions: number;
+      scheduledClasses: number;
+      total: number;
+    }>;
+  }>>`
+    WITH activity_days AS (
+      SELECT generate_series(
+        date_trunc('day', ${activityFrom}::timestamp),
+        date_trunc('day', ${activityTo}::timestamp - interval '1 day'),
+        interval '1 day'
+      ) AS day
+    ),
+    checkins AS (
+      SELECT date_trunc('day', "checkedInAt") AS day, count(*)::int AS count
+      FROM "ClassSignup"
+      WHERE "checkedInAt" >= ${activityFrom} AND "checkedInAt" < ${activityTo}
+      GROUP BY 1
+    ),
+    workout_logs AS (
+      SELECT date_trunc('day', "checkedInAt") AS day, count(*)::int AS count
+      FROM "WorkoutLog"
+      WHERE "checkedInAt" >= ${activityFrom} AND "checkedInAt" < ${activityTo}
+      GROUP BY 1
+    ),
+    coach_sessions AS (
+      SELECT date_trunc('day', "createdAt") AS day, count(*)::int AS count
+      FROM "CoachClassSession"
+      WHERE "createdAt" >= ${activityFrom} AND "createdAt" < ${activityTo}
+      GROUP BY 1
+    ),
+    scheduled AS (
+      SELECT date_trunc('day', "datetime") AS day, count(*)::int AS count
+      FROM "Class"
+      WHERE "datetime" >= ${activityFrom} AND "datetime" < ${activityTo} AND "status" <> 'CANCELED'
+      GROUP BY 1
+    ),
+    activity AS (
+      SELECT json_agg(
+        json_build_object(
+          'dateKey', to_char(d.day, 'YYYY-MM-DD'),
+          'athleteCheckIns', COALESCE(ci.count, 0),
+          'workoutLogs', COALESCE(wl.count, 0),
+          'coachSessions', COALESCE(cs.count, 0),
+          'scheduledClasses', COALESCE(sc.count, 0),
+          'total', COALESCE(ci.count, 0) + COALESCE(wl.count, 0) + COALESCE(cs.count, 0) + COALESCE(sc.count, 0)
+        )
+        ORDER BY d.day
+      ) AS rows
+      FROM activity_days d
+      LEFT JOIN checkins ci ON ci.day = d.day
+      LEFT JOIN workout_logs wl ON wl.day = d.day
+      LEFT JOIN coach_sessions cs ON cs.day = d.day
+      LEFT JOIN scheduled sc ON sc.day = d.day
+    )
+    SELECT
+      (SELECT count(*)::int FROM "User" WHERE "role" = 'MEMBER' AND ("inviteAcceptedAt" IS NOT NULL OR "lastLoginAt" IS NOT NULL)) AS "members",
+      (SELECT count(*)::int FROM "User" WHERE "role" = 'MEMBER' AND ("inviteAcceptedAt" IS NOT NULL OR "lastLoginAt" IS NOT NULL) AND "paymentStatus" = 'UNPAID') AS "overdue",
+      (SELECT count(*)::int FROM "User" WHERE "role" = 'MEMBER' AND ("inviteAcceptedAt" IS NOT NULL OR "lastLoginAt" IS NOT NULL) AND "paymentStatus" = 'PAID' AND "nextPaymentDue" >= ${now} AND "nextPaymentDue" <= ${renewalWindowEnd}) AS "upcoming",
+      (SELECT count(*)::int FROM "User" WHERE "role" = 'ADMIN') AS "activeCoaches",
+      (SELECT count(*)::int FROM "ClassSignup" WHERE "checkedInAt" IS NOT NULL) AS "totalCheckIns",
+      (SELECT count(*)::int FROM "WorkoutLog") AS "totalWorkoutLogs",
+      (SELECT count(*)::int FROM "CoachClassSession") AS "totalCoachSessions",
+      (SELECT count(*)::int FROM "Class" WHERE "datetime" >= ${now} AND "status" <> 'CANCELED') AS "scheduledClasses",
+      COALESCE((SELECT rows FROM activity), '[]'::json) AS "activity"
+  `;
 
-  for (const checkIn of recentCheckIns) {
-    if (checkIn.checkedInAt) incrementBucket(bucketsByDateKey, checkIn.checkedInAt, "athleteCheckIns");
-  }
-  for (const log of recentWorkoutLogs) {
-    incrementBucket(bucketsByDateKey, log.checkedInAt, "workoutLogs");
-  }
-  for (const session of recentCoachSessions) {
-    incrementBucket(bucketsByDateKey, session.createdAt, "coachSessions");
-  }
-  for (const klass of recentClasses) {
-    incrementBucket(bucketsByDateKey, klass.datetime, "scheduledClasses");
-  }
-
-  const activity = activityBuckets.map((bucket) => ({
-    ...bucket,
-    total: bucket.athleteCheckIns + bucket.workoutLogs + bucket.coachSessions + bucket.scheduledClasses
-  }));
-
-  return {
-    members,
-    overdue,
-    upcoming,
-    activeCoaches,
-    totalCheckIns,
-    totalWorkoutLogs,
-    totalCoachSessions,
-    scheduledClasses,
-    activity
-  };
+  return writeResponseCache("users:stats", stats, 15 * 1000);
 }
 
 export async function updateUser(id: string, data: {
@@ -282,7 +273,12 @@ export async function updateUser(id: string, data: {
     data: normalized,
     select: userMetricsSelect
   });
+  clearDashboardCaches();
   return withMembershipStatusAndProfileMetrics(user);
+}
+
+export function clearDashboardCaches() {
+  clearResponseCache("users:");
 }
 
 export async function deleteUser(id: string) {

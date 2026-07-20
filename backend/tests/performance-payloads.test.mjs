@@ -39,22 +39,32 @@ test("backend exposes lightweight member options and stats queries for admin sur
   );
   assert.match(
     dashboardStatsSource,
-    /prisma\.classSignup\.findMany/,
+    /FROM "ClassSignup"/,
     "dashboard stats should aggregate athlete app check-in activity"
   );
   assert.match(
     dashboardStatsSource,
-    /prisma\.workoutLog\.findMany/,
+    /FROM "WorkoutLog"/,
     "dashboard stats should aggregate athlete workout logs"
   );
   assert.match(
     dashboardStatsSource,
-    /prisma\.coachClassSession\.findMany/,
+    /FROM "CoachClassSession"/,
     "dashboard stats should aggregate coach app class sessions"
   );
   assert.match(
     dashboardStatsSource,
-    /activityBuckets\.map/,
+    /prisma\.\$queryRaw/,
+    "dashboard stats should use one database round trip instead of competing for the serverless connection pool"
+  );
+  assert.match(
+    dashboardStatsSource,
+    /readResponseCache/,
+    "dashboard stats should cache hot dashboard recall briefly"
+  );
+  assert.match(
+    dashboardStatsSource,
+    /json_agg\(/,
     "dashboard stats should return a chart-ready activity series"
   );
 });

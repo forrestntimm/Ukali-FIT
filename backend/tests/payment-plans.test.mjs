@@ -72,6 +72,8 @@ test('upcoming classes query keeps signup payload lean for mobile schedule scree
 
   assert.doesNotMatch(listUpcomingClassesSource, /signups:\s*true/, 'class list queries should not include full signup records');
   assert.match(listUpcomingClassesSource, /signups:\s*{\s*select:\s*{\s*id:\s*true,\s*userId:\s*true,\s*checkedInAt:\s*true/s, 'class list queries should select only the signup fields the apps need');
+  assert.match(listUpcomingClassesSource, /addUtcDays\(from,\s*14\)/, 'mobile class list should default to a short upcoming window instead of downloading the ten-year schedule');
+  assert.match(listUpcomingClassesSource, /take:\s*limit/, 'mobile class list should cap response size at the database query');
 });
 
 test('upcoming class coach filter includes primary and secondary assignments', () => {

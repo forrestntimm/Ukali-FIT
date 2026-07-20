@@ -53,6 +53,8 @@ router.get("/", requireAuth, async (req, res) => {
   const mine = req.query.mine === "true";
   const summary = req.query.summary === "true";
   const limit = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : undefined;
+  const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+  const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
   const queryCoachId = typeof req.query.coachId === "string" ? req.query.coachId : undefined;
   const coachId = mine ? req.user!.id : queryCoachId;
   if (mine && summary && coachId) {
@@ -63,7 +65,7 @@ router.get("/", requireAuth, async (req, res) => {
     const classes = await listUpcomingClassSummaries({ limit });
     return res.json(classes);
   }
-  const classes = await listUpcomingClasses({ coachId });
+  const classes = await listUpcomingClasses({ coachId, from, to, limit });
   return res.json(classes);
 });
 

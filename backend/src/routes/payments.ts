@@ -3,7 +3,12 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/role";
 import { validate } from "../middleware/validate";
-import { createStripePaymentIntent, listPaymentsByUser, markManualPayment } from "../services/paymentService";
+import {
+  createStripePaymentIntent,
+  getIncomeReport,
+  listPaymentsByUser,
+  markManualPayment
+} from "../services/paymentService";
 import { PAYMENT_PLANS, listPaymentPlans } from "../services/paymentPlans";
 import { config } from "../utils/config";
 
@@ -41,6 +46,10 @@ router.post("/intent", requireAuth, validate(intentSchema), async (req, res) => 
 
 router.get("/plans", requireAuth, async (_req, res) => {
   return res.json(listPaymentPlans());
+});
+
+router.get("/income", requireAuth, requireRole("ADMIN"), async (_req, res) => {
+  return res.json(await getIncomeReport());
 });
 
 router.post("/manual", requireAuth, requireRole("ADMIN"), validate(manualSchema), async (req, res) => {

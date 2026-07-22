@@ -9,7 +9,9 @@ export const ADMIN_MEMBERS_CACHE_KEY = "admin-users";
 export const ADMIN_MEMBERS_TTL_MS = 2 * 60 * 1000;
 export const MEMBER_OPTIONS_CACHE_KEY = "admin-member-options";
 export const PAYMENT_PLANS_CACHE_KEY = "payment-plans:v2";
+export const PAYMENT_INCOME_CACHE_KEY = "payment-income-report:v1";
 export const PAYMENTS_BOOTSTRAP_TTL_MS = 5 * 60 * 1000;
+export const PAYMENT_INCOME_TTL_MS = 2 * 60 * 1000;
 export const COACHES_CACHE_KEY = "admin-coaches";
 export const SCHEDULING_CACHE_TTL_MS = 5 * 60 * 1000;
 export const WORKOUTS_CACHE_KEY = "workouts-list";
@@ -116,6 +118,10 @@ export function warmPaymentsData(options: { shouldWrite?: () => boolean } = {}) 
     }, options),
     warmCache(PAYMENT_PLANS_CACHE_KEY, PAYMENTS_BOOTSTRAP_TTL_MS, async () => {
       const res = await api.get("/payments/plans");
+      return res.data;
+    }, options),
+    warmCache(PAYMENT_INCOME_CACHE_KEY, PAYMENT_INCOME_TTL_MS, async () => {
+      const res = await api.get("/payments/income");
       return res.data;
     }, options)
   ]).then(() => {});

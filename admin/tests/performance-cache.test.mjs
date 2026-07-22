@@ -82,6 +82,7 @@ test("admin app warms every tab after auth", () => {
   assert.match(adminWarmupsSource, /api\.get\("\/users"\)/, "warmups should fetch full members data");
   assert.match(adminWarmupsSource, /api\.get\("\/users\/member-options"\)/, "warmups should fetch payment athlete options");
   assert.match(adminWarmupsSource, /api\.get\("\/payments\/plans"\)/, "warmups should fetch payment plans");
+  assert.match(adminWarmupsSource, /api\.get\("\/payments\/income"\)/, "warmups should fetch payment income tracking");
   assert.match(adminWarmupsSource, /api\.get\("\/users\/coaches"\)/, "warmups should fetch coaches");
   assert.match(adminWarmupsSource, /api\.get\("\/scheduling\/classes"/, "warmups should fetch the current scheduling week");
   assert.match(adminWarmupsSource, /api\.get\("\/workouts"\)/, "warmups should fetch WOD data");
@@ -127,10 +128,16 @@ test("payments page restores cached member and plan data before refreshing", () 
   assert.match(paymentsSource, /readPageCache/, "payments page should restore warm cache");
   assert.match(paymentsSource, /writePageCache/, "payments page should persist warm cache");
   assert.match(paymentsSource, /MEMBER_OPTIONS_CACHE_KEY/, "payments page should use the lightweight member-options cache key");
+  assert.match(paymentsSource, /PAYMENT_INCOME_CACHE_KEY/, "payments page should use the income report cache key");
   assert.match(
     paymentsSource,
     /api\.get\("\/users\/member-options"\)/,
     "payments page should fetch lightweight athlete options instead of the full users index"
+  );
+  assert.match(
+    paymentsSource,
+    /api\.get\("\/payments\/income"\)/,
+    "payments page should fetch a compact income report instead of calculating revenue in the browser"
   );
   assert.doesNotMatch(
     paymentsSource,

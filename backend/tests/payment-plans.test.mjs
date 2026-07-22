@@ -38,6 +38,23 @@ test('manual payment route accepts a plan code and exposes payment plans to clie
   assert.match(source, /quantity:/, 'manual payment schema should support plan quantities');
 });
 
+test('backend exposes an admin income report for website revenue tracking', () => {
+  const routeSource = fs.readFileSync(paymentRoutesPath, 'utf8');
+  const serviceSource = fs.readFileSync(paymentServicePath, 'utf8');
+
+  assert.match(routeSource, /router\.get\("\/income",\s*requireAuth,\s*requireRole\("ADMIN"\)/, 'income report should be admin-only');
+  assert.match(serviceSource, /export async function getIncomeReport/, 'payment service should build a shared income report');
+  assert.match(serviceSource, /where:\s*{\s*status:\s*PaymentState\.SUCCESS\s*}/, 'income totals should only count successful payments');
+  assert.match(serviceSource, /today:\s*0/, 'income report should expose today totals');
+  assert.match(serviceSource, /week:\s*0/, 'income report should expose week totals');
+  assert.match(serviceSource, /month:\s*0/, 'income report should expose month totals');
+  assert.match(serviceSource, /year:\s*0/, 'income report should expose year totals');
+  assert.match(serviceSource, /allTime:\s*0/, 'income report should expose all-time totals');
+  assert.match(serviceSource, /byMethod/, 'income report should group by payment method');
+  assert.match(serviceSource, /byPlan/, 'income report should group by plan');
+  assert.match(serviceSource, /unpaidMembers/, 'income report should include outstanding members');
+});
+
 test('manual payment service stores the chosen plan metadata on the payment record', () => {
   const source = fs.readFileSync(paymentServicePath, 'utf8');
 
